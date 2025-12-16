@@ -10,16 +10,32 @@ type Message = {
   timestamp: Date;
 };
 
+// Example queries - only working ones from QA tests
+const EXAMPLE_QUERIES = [
+  {
+    category: "Landing Pages",
+    queries: [
+      "Which landing pages work best for Summer Promo 2024?",
+      "Show me top 3 landing pages for offer 1001 in the US",
+    ],
+  },
+  {
+    category: "Performance",
+    queries: [
+      "Give me the weekly performance summary",
+      "What's our top performing geo this week?",
+    ],
+  },
+  {
+    category: "Export Reports",
+    queries: [
+      "Download fraud report for last week",
+    ],
+  },
+];
+
 export default function Chat() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "welcome",
-      role: "assistant",
-      content:
-        "Welcome to Adsomnia Data Agent. I can help you with:\n\n• **Analyze Landing Pages** — \"Which LP is best for Offer X?\"\n• **Export Reports** — \"Download fraud report for last week\"\n• **Performance Summaries** — \"How did we do this week?\"\n• **Generate Tracking Links** — \"Get link for Partner 123, Offer 456\"\n\nWhat would you like to know?",
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
@@ -92,6 +108,14 @@ export default function Chat() {
     }
   };
 
+  const handleExampleClick = (query: string) => {
+    setInput(query);
+    // Auto-focus the textarea
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 0);
+  };
+
   const formatContent = (content: string) => {
     // Split by markdown patterns and format
     const parts = content.split(/(\*\*.*?\*\*|`.*?`|\n)/);
@@ -121,6 +145,36 @@ export default function Chat() {
     <div className="flex flex-1 flex-col h-full bg-bg-primary">
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+        {/* Example Queries - Show when no messages */}
+        {messages.length === 0 && (
+          <div className="flex justify-start message-enter">
+            <div className="max-w-[85%]">
+              <div className="border-l-2 border-accent-yellow pl-4">
+                <div className="space-y-4">
+                  {EXAMPLE_QUERIES.map((category, catIdx) => (
+                    <div key={catIdx} className="space-y-2">
+                      <div className="text-xs font-semibold text-accent-yellow uppercase tracking-wide mb-2">
+                        {category.category}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {category.queries.map((query, qIdx) => (
+                          <button
+                            key={qIdx}
+                            onClick={() => handleExampleClick(query)}
+                            className="text-xs px-3 py-1.5 border border-border bg-bg-tertiary hover:bg-bg-secondary hover:border-accent-yellow text-text-primary transition-colors rounded cursor-pointer"
+                          >
+                            {query}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {messages.map((message) => (
           <div
             key={message.id}
