@@ -188,7 +188,7 @@ Example for Reports:
 - Never show raw JSON to users - always format it nicely
 
 **Example Transformation:**
-Tool returns: {"top_lps": [{"name": "LP1", "cvr": 4.85, "clicks": 12450}]}
+Tool returns: {{"top_lps": [{{"name": "LP1", "cvr": 4.85, "clicks": 12450}}]}}
 
 You should format as:
 📊 **Top Landing Pages for Offer 123**
@@ -209,14 +209,21 @@ To start, analyze the user's query, determine the intent, extract required entit
     # This requires a prompt template with placeholders
     from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
     
+    # The prompt template for tool calling agents needs specific placeholders
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
+        MessagesPlaceholder(variable_name="chat_history", optional=True),
         ("human", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ])
     
     agent = create_tool_calling_agent(model, tools, prompt)
-    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+    agent_executor = AgentExecutor(
+        agent=agent, 
+        tools=tools, 
+        verbose=True,
+        handle_parsing_errors=True
+    )
     
     print("\n✅ Workflow Agent created with system prompt")
     return agent_executor

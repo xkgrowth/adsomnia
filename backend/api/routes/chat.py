@@ -54,13 +54,17 @@ async def chat_query(
         config = {"configurable": {"thread_id": thread_id}}
         
         # Invoke the agent with the user's message
+        # AgentExecutor expects {"input": "message"} format
         result = agent.invoke(
-            {"messages": [{"role": "user", "content": request.message}]},
+            {"input": request.message},
             config
         )
         
         # Extract the response from the agent's result
-        if "messages" in result:
+        # AgentExecutor returns {"output": "response"} format
+        if "output" in result:
+            response_content = result["output"]
+        elif "messages" in result:
             last_message = result["messages"][-1]
             response_content = last_message.content if hasattr(last_message, "content") else str(last_message)
         else:
