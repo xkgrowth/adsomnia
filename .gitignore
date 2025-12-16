@@ -6,6 +6,11 @@
 .env.test.local
 .env.production.local
 
+# Documentation files with API keys
+*_ENV_VARIABLES.md
+*_SETUP.md
+VERCEL_*.md
+
 # Dependencies
 node_modules/
 
