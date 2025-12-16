@@ -60,4 +60,21 @@ Each agent should reference these shared documents:
 - `agents/api/everflow_api_reference.md` - API documentation
 - `agents/shared/agent_context.md` - Agent behavior patterns
 - `agents/shared/error_handling.md` - Error patterns
+- **`.cursor/rules/chat-interface-design.mdc`** - **Brand design guidelines (CRITICAL for UI work)**
+
+## Design System
+
+All UI work MUST follow the Adsomnia brand guidelines in `.cursor/rules/chat-interface-design.mdc`.
+
+**Quick Reference:**
+- Pure black background (`#000000`)
+- White text, yellow accents (`#FFD700`)
+- Sharp corners (NO rounded corners >4px)
+- Bebas Neue headlines (ALL CAPS)
+- Outlined buttons, not filled
+
+
+
+
+
 

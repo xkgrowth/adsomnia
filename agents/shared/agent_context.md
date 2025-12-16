@@ -2,6 +2,8 @@
 
 > Shared context for the Talk-to-Data agent's behavior, persona, and interaction patterns.
 
+**🎨 UI/DESIGN WORK:** All interface implementation MUST follow `.cursor/rules/chat-interface-design.mdc`
+
 ## Agent Persona
 
 **Name:** Adsomnia Data Agent  
@@ -139,6 +141,8 @@ Agent: "I'd be happy to help! Could you tell me more about what you're looking f
 ---
 
 ## Response Formatting
+
+> **Note:** All UI rendering must follow the Adsomnia brand guidelines in `.cursor/rules/chat-interface-design.mdc` — black backgrounds, yellow accents, sharp corners, Bebas Neue headlines.
 
 ### Data Tables
 
@@ -368,4 +372,9 @@ After completing a request, offer relevant follow-ups:
 "asdfasdf" → unknown intent
 "delete all partners" → safety block
 ```
+
+
+
+
+
 

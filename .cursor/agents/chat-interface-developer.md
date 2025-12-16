@@ -104,4 +104,95 @@ Senior Frontend/Full-Stack Engineer responsible for the conversational user inte
 - `ARCHITECTURE.md` - System design
 - `agents/shared/agent_context.md` - Response templates
 - `agents/workflows/WF*.md` - UI requirements per workflow
+- **`.cursor/rules/chat-interface-design.mdc`** - **CRITICAL: Brand design guidelines**
+
+---
+
+## Adsomnia Design System (MUST FOLLOW)
+
+**Reference:** `.cursor/rules/chat-interface-design.mdc` for complete specifications.
+
+### Core Brand Rules
+
+| Element | Specification |
+|---------|---------------|
+| **Background** | Pure black `#000000` |
+| **Text** | White `#FFFFFF` (primary), `#B3B3B3` (secondary) |
+| **Primary Accent** | Yellow `#FFD700` — CTAs, highlights, active states |
+| **Secondary Accent** | Cyan `#00CFFF` — links, info |
+| **Tertiary Accent** | Orange `#FF8C00` — warnings, alerts |
+| **Border Radius** | Sharp corners (0-4px max) — NO rounded corners |
+| **Buttons** | Outlined/bordered style, not filled |
+| **Headlines** | Bebas Neue font, ALL CAPS, tight tracking |
+| **Body Text** | Inter font |
+| **Monospace** | JetBrains Mono (for data, timestamps, tagline) |
+
+### Design Principles
+
+**DO:**
+- ✓ Use high contrast (white on black)
+- ✓ Keep corners sharp (0 or 2-4px radius max)
+- ✓ Use ALL CAPS for headers and labels
+- ✓ Maintain generous whitespace
+- ✓ Use accent colors sparingly for emphasis
+- ✓ Use border-based buttons (outline style)
+
+**DON'T:**
+- ✗ Use rounded corners (>4px radius)
+- ✗ Use gradients (solid colors only)
+- ✗ Mix multiple accent colors in one view
+- ✗ Use light backgrounds
+- ✗ Add playful or whimsical elements
+
+### Message Component Patterns
+
+```
+Agent Message:
+┌─────────────────────────────────────────────────────────┐
+│ ADSOMNIA AGENT                              12:34 PM    │
+│ ▌                                                       │
+│ ▌ Response content with **bold** in yellow             │
+│ ▌                                                       │
+└─────────────────────────────────────────────────────────┘
+  └── Yellow left border accent
+
+User Message:
+┌─────────────────────────────────────────────────────────┐
+│                              12:35 PM              YOU  │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ User query text                                  │   │
+│  └─────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+  └── Bordered box, right-aligned
+```
+
+### CSS Variables Available
+
+```css
+--color-bg-primary: #000000
+--color-bg-tertiary: #141414
+--color-text-primary: #FFFFFF
+--color-text-muted: #666666
+--color-accent-yellow: #FFD700
+--color-accent-cyan: #00CFFF
+--color-accent-orange: #FF8C00
+--color-border: #333333
+```
+
+### Tailwind Classes
+
+```
+bg-bg-primary, bg-bg-tertiary, bg-bg-elevated
+text-text-primary, text-text-secondary, text-text-muted
+text-accent-yellow, text-accent-cyan, text-accent-orange
+border-border, border-accent-yellow
+font-headline, font-body, font-mono
+btn-primary, btn-secondary
+label-caps, tagline
+```
+
+
+
+
+
 
