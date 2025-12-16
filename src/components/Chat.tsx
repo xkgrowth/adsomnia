@@ -76,20 +76,20 @@ const generateExampleQueries = (affiliates: Affiliate[], offers: Offer[]): Examp
       category: "Landing Pages",
       queries: [
         offer1 ? `Which landing pages work best for ${offer1.offer_name}?` : "Which landing pages work best for Summer Promo 2024?",
-        offer1 ? `Show me top 3 landing pages for offer ${offer1.offer_id} in the US` : "Show me top 3 landing pages for offer 1001 in the US",
-        aff1 ? `What's the best converting LP for affiliate ${aff1.affiliate_id}?` : "What's the best converting LP for affiliate 12345?",
+        offer1 ? `Show me top 3 landing pages for ${offer1.offer_name} in the US` : "Show me top 3 landing pages for Summer Promo 2024 in the US",
+        aff1 ? `What's the best converting LP for ${aff1.affiliate_name}?` : "What's the best converting LP for Premium Traffic Partners?",
         offer2 ? `Top landing pages for ${offer2.offer_name} in Germany` : "Top landing pages for Holiday Special in Germany",
-        offer2 ? `Which LPs perform best for offer ${offer2.offer_id}?` : "Which LPs perform best for offer 1002?",
+        offer2 ? `Which LPs perform best for ${offer2.offer_name}?` : "Which LPs perform best for Holiday Special?",
       ],
     },
     {
       category: "Export Reports",
       queries: [
         "Export fraud report for last week",
-        offer1 ? `Download conversion data for offer ${offer1.offer_id} from December` : "Download conversion data for offer 1001 from December",
-        "Get me a CSV of conversions with sub1, sub2 for last month",
+        offer1 ? `Download conversion data for ${offer1.offer_name} from December` : "Download conversion data for Summer Promo 2024 from December",
+        "Get me a CSV of conversions with tracking parameters for last month",
         offer1 ? `Export stats for ${offer1.offer_name} from November 1st to 15th` : "Export stats for Summer Promo 2024 from November 1st to 15th",
-        aff1 ? `Pull a scrub analysis report for affiliate ${aff1.affiliate_id}` : "Pull a scrub analysis report for affiliate 12345",
+        aff1 ? `Pull a scrub analysis report for ${aff1.affiliate_name}` : "Pull a scrub analysis report for Premium Traffic Partners",
       ],
     },
   ];
