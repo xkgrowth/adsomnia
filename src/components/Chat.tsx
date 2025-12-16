@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { sendChatMessage } from "@/lib/api";
 
 type Message = {
   id: string;
@@ -21,6 +22,8 @@ export default function Chat() {
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -46,21 +49,40 @@ export default function Chat() {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
+    setError(null);
 
-    // TODO: Replace with actual API call
-    setTimeout(() => {
+    try {
+      // Call the API
+      const response = await sendChatMessage(userMessage.content, threadId || undefined);
+      
+      // Update thread ID if provided
+      if (response.thread_id) {
+        setThreadId(response.thread_id);
+      }
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content:
-          "**Coming Soon**\n\nThe agent is being built. This is a placeholder response.\n\nYour query: \"" +
-          userMessage.content +
-          '"',
+        content: response.response,
         timestamp: new Date(),
       };
+      
       setMessages((prev) => [...prev, assistantMessage]);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Failed to get response";
+      setError(errorMessage);
+      
+      const errorResponse: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: `**Error**\n\n${errorMessage}\n\nPlease check that the API server is running at http://localhost:8000`,
+        timestamp: new Date(),
+      };
+      
+      setMessages((prev) => [...prev, errorResponse]);
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -71,13 +93,25 @@ export default function Chat() {
   };
 
   const formatContent = (content: string) => {
-    return content.split(/(\*\*.*?\*\*)/).map((part, i) => {
+    // Split by markdown patterns and format
+    const parts = content.split(/(\*\*.*?\*\*|`.*?`|\n)/);
+    return parts.map((part, i) => {
       if (part.startsWith("**") && part.endsWith("**")) {
         return (
           <strong key={i} className="text-accent-yellow font-semibold">
             {part.slice(2, -2)}
           </strong>
         );
+      }
+      if (part.startsWith("`") && part.endsWith("`")) {
+        return (
+          <code key={i} className="bg-bg-secondary px-1 py-0.5 rounded text-xs font-mono">
+            {part.slice(1, -1)}
+          </code>
+        );
+      }
+      if (part === "\n") {
+        return <br key={i} />;
       }
       return part;
     });
@@ -182,6 +216,11 @@ export default function Chat() {
             SEND
           </button>
         </form>
+        {error && (
+          <p className="text-xs text-accent-orange mt-2 text-center font-mono">
+            ⚠️ {error}
+          </p>
+        )}
         <p className="text-xs text-text-muted mt-3 text-center font-mono tracking-wide">
           ENTER TO SEND • SHIFT+ENTER FOR NEW LINE
         </p>

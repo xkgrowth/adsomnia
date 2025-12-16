@@ -64,16 +64,21 @@ class EverflowClient:
             response = self._request("POST", "/v1/networks/reporting/entity", payload)
             table = response.get("table", [])
             
-            # Extract unique affiliates
+            # Extract unique affiliates - use ALL fields from API response
             affiliates = []
             seen_ids = set()
             for row in table:
                 aff_id = row.get("affiliate_id")
                 if aff_id and aff_id not in seen_ids:
                     seen_ids.add(aff_id)
+                    # Capture ALL affiliate fields from Everflow API response
                     affiliates.append({
                         "affiliate_id": aff_id,
-                        "affiliate_name": row.get("affiliate_name", f"Partner {aff_id}")
+                        "affiliate_name": row.get("affiliate_name") or row.get("affiliate") or f"Partner {aff_id}",
+                        # Include any other affiliate-related fields
+                        "affiliate": row.get("affiliate"),  # Sometimes the name is in this field
+                        # Store full row for additional context
+                        "_raw": {k: v for k, v in row.items() if k.startswith("affiliate")}
                     })
                     if len(affiliates) >= limit:
                         break
@@ -101,16 +106,30 @@ class EverflowClient:
             response = self._request("POST", "/v1/networks/reporting/entity", payload)
             table = response.get("table", [])
             
-            # Extract unique offers
+            # Extract unique offers - use ALL fields from API response
             offers = []
             seen_ids = set()
             for row in table:
                 offer_id = row.get("offer_id")
                 if offer_id and offer_id not in seen_ids:
                     seen_ids.add(offer_id)
+                    # Capture ALL offer fields from Everflow API response
+                    # Try multiple field names: offer_name, advertiser_name, offer
+                    offer_name = (
+                        row.get("offer_name") or 
+                        row.get("advertiser_name") or 
+                        row.get("advertiser") or
+                        row.get("offer") or 
+                        f"Offer {offer_id}"
+                    )
                     offers.append({
                         "offer_id": offer_id,
-                        "offer_name": row.get("offer_name", f"Offer {offer_id}")
+                        "offer_name": offer_name,
+                        "advertiser_name": row.get("advertiser_name"),  # Explicit advertiser_name field
+                        "advertiser": row.get("advertiser"),  # Sometimes in this field
+                        "offer": row.get("offer"),  # Sometimes the name is in this field
+                        # Store full row for additional context
+                        "_raw": {k: v for k, v in row.items() if k.startswith(("offer", "advertiser"))}
                     })
                     if len(offers) >= limit:
                         break
@@ -147,17 +166,21 @@ class EverflowClient:
             response = self._request("POST", "/v1/networks/reporting/entity", payload)
             table = response.get("table", [])
             
-            # Extract unique landing pages
+            # Extract unique landing pages - use ALL fields from API response
             lps = []
             seen_ids = set()
             for row in table:
                 lp_id = row.get("offer_url_id")
                 if lp_id and lp_id not in seen_ids:
                     seen_ids.add(lp_id)
+                    # Capture ALL landing page fields from Everflow API response
                     lps.append({
                         "offer_url_id": lp_id,
-                        "offer_url_name": row.get("offer_url_name", f"LP {lp_id}"),
-                        "offer_id": row.get("offer_id")
+                        "offer_url_name": row.get("offer_url_name") or row.get("offer_url") or f"LP {lp_id}",
+                        "offer_id": row.get("offer_id"),
+                        "offer_url": row.get("offer_url"),  # Sometimes the name is in this field
+                        # Store full row for additional context
+                        "_raw": {k: v for k, v in row.items() if k.startswith("offer_url")}
                     })
                     if len(lps) >= limit:
                         break
@@ -185,15 +208,25 @@ class EverflowClient:
             response = self._request("POST", "/v1/networks/reporting/entity", payload)
             table = response.get("table", [])
             
+            # Extract countries with ALL fields from API response
             countries = []
             seen = set()
             for row in table:
                 country_code = row.get("country_code")
                 if country_code and country_code not in seen:
                     seen.add(country_code)
-                    countries.append(country_code)
+                    # Capture ALL country fields from Everflow API response
+                    countries.append({
+                        "code": country_code,
+                        "name": row.get("country_name") or row.get("country") or country_code,
+                        "country": row.get("country"),  # Sometimes the name is in this field
+                        "country_name": row.get("country_name"),  # Explicit country_name field
+                        # Store full row for additional context
+                        "_raw": {k: v for k, v in row.items() if k.startswith("country")}
+                    })
             
-            return sorted(countries)
+            # Return as list of dicts with all fields
+            return countries
         except Exception as e:
             print(f"Error fetching countries: {str(e)}")
             return []

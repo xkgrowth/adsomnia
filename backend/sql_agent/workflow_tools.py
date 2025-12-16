@@ -2,10 +2,11 @@
 Workflow Tools for LangChain Agent.
 Replaces SQL tools with Everflow workflow tools (WF1-WF6).
 """
-from typing import Optional, Literal
+from typing import Optional, Literal, Union
 from langchain.tools import tool
 from datetime import datetime, timedelta
 import json
+from .entity_resolver import get_resolver
 
 
 # Workflow Tool Descriptions for LLM
@@ -86,31 +87,52 @@ WORKFLOW_DESCRIPTIONS = {
 
 
 @tool
-def wf1_generate_tracking_link(affiliate_id: int, offer_id: int) -> str:
+def wf1_generate_tracking_link(
+    affiliate_id: Union[int, str],
+    offer_id: Union[int, str]
+) -> str:
     """
     Generate a tracking link for an affiliate on an offer.
     May require approval confirmation if affiliate is not already approved.
     
     Args:
-        affiliate_id: The affiliate/partner ID
-        offer_id: The offer ID
+        affiliate_id: The affiliate/partner ID (int) or name (str)
+        offer_id: The offer ID (int) or name (str)
     
     Returns:
         Tracking URL or confirmation request
     """
+    resolver = get_resolver()
+    
+    # Resolve names to IDs
+    resolved_aff_id = resolver.resolve_affiliate(affiliate_id)
+    resolved_offer_id = resolver.resolve_offer(offer_id)
+    
+    if resolved_aff_id is None:
+        return json.dumps({
+            "status": "error",
+            "message": f"Could not find affiliate: {affiliate_id}. Please provide a valid affiliate ID or name."
+        })
+    
+    if resolved_offer_id is None:
+        return json.dumps({
+            "status": "error",
+            "message": f"Could not find offer: {offer_id}. Please provide a valid offer ID or name."
+        })
+    
     # TODO: Implement actual Everflow API call
     # This is a placeholder that shows the structure
     return json.dumps({
         "status": "success",
-        "tracking_link": f"https://tracking.everflow.io/aff_c?offer_id={offer_id}&aff_id={affiliate_id}",
-        "message": f"Tracking link generated for Partner {affiliate_id} on Offer {offer_id}"
+        "tracking_link": f"https://tracking.everflow.io/aff_c?offer_id={resolved_offer_id}&aff_id={resolved_aff_id}",
+        "message": f"Tracking link generated for Partner {resolved_aff_id} on Offer {resolved_offer_id}"
     })
 
 
 @tool
 def wf2_identify_top_lps(
-    offer_id: int,
-    country_code: Optional[str] = None,
+    offer_id: Union[int, str],
+    country_code: Optional[Union[str, int]] = None,
     days: int = 30,
     min_leads: int = 20,
     top_n: int = 3
@@ -119,8 +141,8 @@ def wf2_identify_top_lps(
     Find top performing landing pages for an offer.
     
     Args:
-        offer_id: The offer ID
-        country_code: Optional ISO country code (US, DE, FR, etc.)
+        offer_id: The offer ID (int) or name (str)
+        country_code: Optional ISO country code (US, DE, FR, etc.) or country name
         days: Number of days to analyze (default: 30)
         min_leads: Minimum conversions for significance (default: 20)
         top_n: Number of results to return (default: 3)
@@ -128,12 +150,35 @@ def wf2_identify_top_lps(
     Returns:
         JSON string with top N landing pages
     """
+    resolver = get_resolver()
+    
+    # Resolve offer name to ID
+    resolved_offer_id = resolver.resolve_offer(offer_id)
+    if resolved_offer_id is None:
+        return json.dumps({
+            "status": "error",
+            "message": f"Could not find offer: {offer_id}. Please provide a valid offer ID or name."
+        })
+    
+    # Resolve country name to code
+    resolved_country = None
+    if country_code:
+        resolved_country = resolver.resolve_country(country_code)
+        if resolved_country is None and isinstance(country_code, str) and len(country_code) > 3:
+            # If it's a name that wasn't found, return error
+            return json.dumps({
+                "status": "error",
+                "message": f"Could not find country: {country_code}. Please provide a valid country code (e.g., US, DE) or name."
+            })
+        # If it's already a code, use it
+        if resolved_country is None:
+            resolved_country = country_code.upper() if isinstance(country_code, str) else str(country_code)
     # TODO: Implement actual Everflow API call
     # Return structured data - agent will format as table
     return json.dumps({
         "status": "success",
-        "offer_id": offer_id,
-        "country_code": country_code,
+        "offer_id": resolved_offer_id,
+        "country_code": resolved_country,
         "period_days": days,
         "top_lps": [
             {
@@ -173,11 +218,13 @@ def wf3_export_report(
         report_type: Type of report ("fraud", "conversions", "stats", "scrub", "variance")
         date_range: Natural language date range (e.g., "last week", "December 2024")
         columns: Optional JSON string of column names (e.g., '["sub1", "sub2", "affiliate"]')
-        filters: Optional JSON string of filters (e.g., '{"offer_id": 123}')
+        filters: Optional JSON string of filters (e.g., '{"offer_id": 123, "offer_name": "Summer Promo"}')
     
     Returns:
         Download URL for the CSV file
     """
+    resolver = get_resolver()
+    
     # Parse columns and filters if provided
     columns_list = None
     filters_dict = None
@@ -193,6 +240,32 @@ def wf3_export_report(
             filters_dict = json.loads(filters) if isinstance(filters, str) else filters
         except:
             pass
+    
+    # Resolve entity names in filters
+    if filters_dict:
+        # Resolve offer_id or offer_name
+        if "offer_name" in filters_dict:
+            resolved_offer_id = resolver.resolve_offer(filters_dict["offer_name"])
+            if resolved_offer_id:
+                filters_dict["offer_id"] = resolved_offer_id
+                del filters_dict["offer_name"]
+            else:
+                return json.dumps({
+                    "status": "error",
+                    "message": f"Could not find offer: {filters_dict['offer_name']}"
+                })
+        
+        # Resolve affiliate_id or affiliate_name
+        if "affiliate_name" in filters_dict:
+            resolved_aff_id = resolver.resolve_affiliate(filters_dict["affiliate_name"])
+            if resolved_aff_id:
+                filters_dict["affiliate_id"] = resolved_aff_id
+                del filters_dict["affiliate_name"]
+            else:
+                return json.dumps({
+                    "status": "error",
+                    "message": f"Could not find affiliate: {filters_dict['affiliate_name']}"
+                })
     
     # TODO: Implement actual Everflow API call and date parsing
     return json.dumps({
@@ -255,7 +328,8 @@ def wf5_check_paused_partners(
 @tool
 def wf6_generate_weekly_summary(
     days: int = 7,
-    group_by: Literal["country", "offer"] = "country"
+    group_by: Literal["country", "offer"] = "country",
+    country: Optional[Union[str, int]] = None
 ) -> str:
     """
     Generate weekly performance summary by country or offer.
@@ -264,10 +338,24 @@ def wf6_generate_weekly_summary(
     Args:
         days: Number of days to analyze (default: 7)
         group_by: Group by "country" or "offer" (default: "country")
+        country: Optional country code or name to filter by
     
     Returns:
         Aggregated performance data with text summary
     """
+    resolver = get_resolver()
+    
+    # Resolve country if provided
+    resolved_country = None
+    if country:
+        resolved_country = resolver.resolve_country(country)
+        if resolved_country is None and isinstance(country, str) and len(country) > 3:
+            return json.dumps({
+                "status": "error",
+                "message": f"Could not find country: {country}. Please provide a valid country code (e.g., US, DE) or name."
+            })
+        if resolved_country is None:
+            resolved_country = country.upper() if isinstance(country, str) else str(country)
     # TODO: Implement actual Everflow API call
     # Return structured data - agent will format as table
     return json.dumps({

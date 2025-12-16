@@ -53,10 +53,11 @@ async def generate_tracking_link(
     May require approval if affiliate is not already approved for the offer.
     """
     try:
-        result = wf1_generate_tracking_link(
-            affiliate_id=request.affiliate_id,
-            offer_id=request.offer_id
-        )
+        # Call the tool using invoke method for LangChain tools
+        result = wf1_generate_tracking_link.invoke({
+            "affiliate_id": request.affiliate_id,
+            "offer_id": request.offer_id
+        })
         
         data = json.loads(result) if isinstance(result, str) else result
         
@@ -82,13 +83,14 @@ async def get_top_landing_pages(
     Find top performing landing pages for an offer (WF2).
     """
     try:
-        result = wf2_identify_top_lps(
-            offer_id=request.offer_id,
-            country_code=request.country_code,
-            days=request.days,
-            min_leads=request.min_leads,
-            top_n=request.top_n
-        )
+        # Call the tool using invoke method for LangChain tools
+        result = wf2_identify_top_lps.invoke({
+            "offer_id": request.offer_id,
+            "country_code": request.country_code,
+            "days": request.days,
+            "min_leads": request.min_leads,
+            "top_n": request.top_n
+        })
         
         data = json.loads(result) if isinstance(result, str) else result
         
@@ -124,12 +126,12 @@ async def export_report(
         columns_str = json.dumps(request.columns) if request.columns else None
         filters_str = json.dumps(request.filters) if request.filters else None
         
-        result = wf3_export_report(
-            report_type=request.report_type,
-            date_range=request.date_range,
-            columns=columns_str,
-            filters=filters_str
-        )
+        result = wf3_export_report.invoke({
+            "report_type": request.report_type,
+            "date_range": request.date_range,
+            "columns": columns_str,
+            "filters": filters_str
+        })
         
         data = json.loads(result) if isinstance(result, str) else result
         
@@ -157,10 +159,10 @@ async def check_default_lp_alert(
     Check for traffic to default landing pages (WF4).
     """
     try:
-        result = wf4_check_default_lp_alert(
-            date=request.date,
-            click_threshold=request.click_threshold
-        )
+        result = wf4_check_default_lp_alert.invoke({
+            "date": request.date,
+            "click_threshold": request.click_threshold
+        })
         
         data = json.loads(result) if isinstance(result, str) else result
         
@@ -190,10 +192,10 @@ async def check_paused_partners(
     Identify partners with significant volume drops (WF5).
     """
     try:
-        result = wf5_check_paused_partners(
-            analysis_days=request.analysis_days,
-            drop_threshold=request.drop_threshold
-        )
+        result = wf5_check_paused_partners.invoke({
+            "analysis_days": request.analysis_days,
+            "drop_threshold": request.drop_threshold
+        })
         
         data = json.loads(result) if isinstance(result, str) else result
         
@@ -223,10 +225,10 @@ async def get_weekly_summary(
     Generate weekly performance summary by country or offer (WF6).
     """
     try:
-        result = wf6_generate_weekly_summary(
-            days=request.days,
-            group_by=request.group_by
-        )
+        result = wf6_generate_weekly_summary.invoke({
+            "days": request.days,
+            "group_by": request.group_by
+        })
         
         data = json.loads(result) if isinstance(result, str) else result
         

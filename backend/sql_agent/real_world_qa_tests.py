@@ -53,16 +53,16 @@ def get_test_data() -> Dict:
             {"offer_url_id": 5004, "offer_url_name": "Generic Offer Page", "offer_id": 1003, "offer_name": "Evergreen Offer A"}
         ],
         "countries": [
-            {"code": "US", "name": "United States"},
-            {"code": "DE", "name": "Germany"},
-            {"code": "GB", "name": "United Kingdom"},
-            {"code": "FR", "name": "France"},
-            {"code": "CA", "name": "Canada"},
-            {"code": "AU", "name": "Australia"},
-            {"code": "NL", "name": "Netherlands"},
-            {"code": "ES", "name": "Spain"},
-            {"code": "IT", "name": "Italy"},
-            {"code": "PL", "name": "Poland"}
+            {"code": "US", "name": "United States", "country": "United States", "country_name": "United States"},
+            {"code": "DE", "name": "Germany", "country": "Germany", "country_name": "Germany"},
+            {"code": "GB", "name": "United Kingdom", "country": "United Kingdom", "country_name": "United Kingdom"},
+            {"code": "FR", "name": "France", "country": "France", "country_name": "France"},
+            {"code": "CA", "name": "Canada", "country": "Canada", "country_name": "Canada"},
+            {"code": "AU", "name": "Australia", "country": "Australia", "country_name": "Australia"},
+            {"code": "NL", "name": "Netherlands", "country": "Netherlands", "country_name": "Netherlands"},
+            {"code": "ES", "name": "Spain", "country": "Spain", "country_name": "Spain"},
+            {"code": "IT", "name": "Italy", "country": "Italy", "country_name": "Italy"},
+            {"code": "PL", "name": "Poland", "country": "Poland", "country_name": "Poland"}
         ]
     }
 
@@ -110,8 +110,21 @@ class RealWorldQATests:
         countries = self.test_data["countries"]
         
         # Handle country format (can be list of strings or list of dicts)
-        country_codes = [c if isinstance(c, str) else c.get("code", c) for c in countries]
-        country_names = [c if isinstance(c, str) else c.get("name", c) for c in countries]
+        # Support all field names: code, name, country, country_name
+        country_codes = []
+        country_names = []
+        for c in countries:
+            if isinstance(c, str):
+                country_codes.append(c)
+                country_names.append(c)
+            else:
+                # Try all possible field names from Everflow API
+                code = c.get("code") or c.get("country_code")
+                name = c.get("name") or c.get("country_name") or c.get("country")
+                if code:
+                    country_codes.append(code)
+                if name:
+                    country_names.append(name)
         
         # WF2 - Top Landing Pages (Real IDs and Names)
         if offers:

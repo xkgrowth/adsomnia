@@ -1,7 +1,7 @@
 """FastAPI application main entry point."""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.api.routes import workflows, health
+from backend.api.routes import workflows, health, chat
 
 # Create FastAPI app
 app = FastAPI(
@@ -24,6 +24,7 @@ app.add_middleware(
 # Include routers
 app.include_router(health.router)
 app.include_router(workflows.router)
+app.include_router(chat.router)
 
 
 @app.on_event("startup")
