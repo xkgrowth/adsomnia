@@ -5,7 +5,8 @@ Uses Google Gemini following LangChain tutorial pattern.
 """
 import os
 from langchain.chat_models import init_chat_model
-from langchain.agents import create_agent
+from langchain.agents import create_tool_calling_agent
+from langchain.agents import AgentExecutor
 from .config import (
     GOOGLE_API_KEY,
     GEMINI_MODEL,
@@ -204,14 +205,21 @@ You should format as:
 To start, analyze the user's query, determine the intent, extract required entities, and call the appropriate workflow tool.
 """
     
-    agent = create_agent(
-        model,
-        tools,
-        system_prompt=system_prompt,
-    )
+    # Create agent using create_tool_calling_agent (LangChain 0.3+)
+    # This requires a prompt template with placeholders
+    from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt),
+        ("human", "{input}"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
+    ])
+    
+    agent = create_tool_calling_agent(model, tools, prompt)
+    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
     
     print("\n✅ Workflow Agent created with system prompt")
-    return agent
+    return agent_executor
 
 
 def build_workflow_agent():
