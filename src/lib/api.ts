@@ -1,9 +1,9 @@
 /**
- * API client for Adsomnia - uses Next.js API routes (serverless functions)
+ * API client for Adsomnia backend
  */
 
-// Use relative paths for Next.js API routes (works in both dev and production)
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY || 'your-secret-api-key-here';
 
 export interface ChatRequest {
   message: string;
@@ -24,12 +24,11 @@ export async function sendChatMessage(
   threadId?: string
 ): Promise<ChatResponse> {
   try {
-    // Use Next.js API route (relative path)
-    const apiUrl = API_BASE_URL ? `${API_BASE_URL}/api/chat/query` : '/api/chat/query';
-    const response = await fetch(apiUrl, {
+    const response = await fetch(`${API_BASE_URL}/api/chat/query`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-API-Key': API_KEY,
       },
       body: JSON.stringify({
         message,
@@ -56,8 +55,7 @@ export async function sendChatMessage(
  */
 export async function checkHealth(): Promise<boolean> {
   try {
-    const apiUrl = API_BASE_URL ? `${API_BASE_URL}/api/health` : '/api/health';
-    const response = await fetch(apiUrl);
+    const response = await fetch(`${API_BASE_URL}/health`);
     return response.ok;
   } catch {
     return false;
@@ -87,14 +85,11 @@ export interface EntitiesResponse {
  */
 export async function fetchEntities(): Promise<EntitiesResponse> {
   try {
-    // Use Next.js API route (relative path)
-    const apiUrl = API_BASE_URL 
-      ? `${API_BASE_URL}/api/entities/all?limit=5` 
-      : '/api/entities/all?limit=5';
-    const response = await fetch(apiUrl, {
+    const response = await fetch(`${API_BASE_URL}/api/entities/all?limit=5`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
+        'X-API-Key': API_KEY,
       },
     });
 
