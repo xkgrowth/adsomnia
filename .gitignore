@@ -77,3 +77,7 @@ temp/
 *.tar.gz
 *.zip
 
+# SQL Agent Database
+Chinook.db
+*.db
+
