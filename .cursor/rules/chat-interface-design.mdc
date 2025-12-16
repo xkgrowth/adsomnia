@@ -1,0 +1,360 @@
+# Adsomnia Chat Interface Design Guidelines
+
+## Brand Identity
+Adsomnia is a high-energy affiliate marketing and traffic platform. The brand exudes confidence, operates 24/7 ("Traffic Never Sleeps"), and communicates with bold, direct visual language.
+
+---
+
+## Color Palette
+
+### Core Colors
+```css
+:root {
+  /* Backgrounds */
+  --color-bg-primary: #000000;           /* Pure black - main background */
+  --color-bg-secondary: #0A0A0A;         /* Near-black - subtle elevation */
+  --color-bg-tertiary: #141414;          /* Dark gray - cards, inputs */
+  
+  /* Text */
+  --color-text-primary: #FFFFFF;         /* Pure white - headlines, primary text */
+  --color-text-secondary: #B3B3B3;       /* Light gray - secondary text */
+  --color-text-muted: #666666;           /* Muted gray - hints, timestamps */
+  
+  /* Accent Colors - Use contextually */
+  --color-accent-yellow: #FFD700;        /* Primary accent - CTAs, highlights */
+  --color-accent-cyan: #00CFFF;          /* Secondary accent - links, info states */
+  --color-accent-orange: #FF8C00;        /* Tertiary accent - warnings, alerts */
+  
+  /* Semantic Colors */
+  --color-success: #5CB85C;              /* Success states */
+  --color-error: #D9534F;                /* Error states */
+  --color-warning: #FF8C00;              /* Warning states (uses accent-orange) */
+  
+  /* Borders & Dividers */
+  --color-border: #333333;               /* Subtle borders */
+  --color-border-hover: #555555;         /* Hover state borders */
+  --color-divider: #222222;              /* Section dividers */
+}
+```
+
+### Accent Color Usage
+- **Yellow (#FFD700)**: Primary CTA buttons, active states, important highlights
+- **Cyan (#00CFFF)**: Links, informational elements, data visualization accents
+- **Orange (#FF8C00)**: Alerts, warnings, secondary actions
+
+---
+
+## Typography
+
+### Font Stack
+```css
+:root {
+  /* Headlines - Bold, condensed, impactful */
+  --font-headline: 'Bebas Neue', 'Oswald', 'Impact', sans-serif;
+  
+  /* Body - Clean, readable */
+  --font-body: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  
+  /* Monospace - For taglines, code, data */
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+}
+```
+
+### Type Scale
+```css
+:root {
+  /* Headlines */
+  --text-hero: 4rem;          /* 64px - Hero headlines */
+  --text-h1: 2.5rem;          /* 40px - Page titles */
+  --text-h2: 2rem;            /* 32px - Section headers */
+  --text-h3: 1.5rem;          /* 24px - Subsection headers */
+  --text-h4: 1.25rem;         /* 20px - Card headers */
+  
+  /* Body */
+  --text-lg: 1.125rem;        /* 18px - Large body text */
+  --text-base: 1rem;          /* 16px - Default body */
+  --text-sm: 0.875rem;        /* 14px - Secondary text */
+  --text-xs: 0.75rem;         /* 12px - Captions, timestamps */
+  
+  /* Line Heights */
+  --leading-tight: 1.1;       /* Headlines */
+  --leading-normal: 1.5;      /* Body text */
+  --leading-relaxed: 1.75;    /* Long-form content */
+  
+  /* Letter Spacing */
+  --tracking-tight: -0.02em;  /* Headlines */
+  --tracking-normal: 0;       /* Body */
+  --tracking-wide: 0.05em;    /* All-caps labels */
+  --tracking-wider: 0.1em;    /* Small caps, taglines */
+}
+```
+
+### Typography Rules
+1. **Headlines**: Always use condensed font, ALL CAPS, tight letter-spacing
+2. **Body text**: Inter or similar clean sans-serif, normal case
+3. **Labels/Tags**: ALL CAPS with wide letter-spacing (0.05-0.1em)
+4. **Monospace**: Use for the "TRAFFIC NEVER SLEEPS" tagline style, data values, timestamps
+
+---
+
+## Component Styles
+
+### Buttons
+
+#### Primary Button (Yellow)
+```css
+.btn-primary {
+  background-color: transparent;
+  border: 2px solid var(--color-accent-yellow);
+  color: var(--color-accent-yellow);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  padding: 12px 32px;
+  transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+  background-color: var(--color-accent-yellow);
+  color: var(--color-bg-primary);
+}
+```
+
+#### Secondary Button (Outline White)
+```css
+.btn-secondary {
+  background-color: transparent;
+  border: 2px solid var(--color-text-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  padding: 12px 32px;
+  transition: all 0.3s ease;
+}
+
+.btn-secondary:hover {
+  background-color: var(--color-text-primary);
+  color: var(--color-bg-primary);
+}
+```
+
+### Chat Interface Elements
+
+#### Chat Container
+```css
+.chat-container {
+  background-color: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 0; /* Sharp corners - matches brand */
+}
+```
+
+#### Message Bubbles
+```css
+/* User Message */
+.message-user {
+  background-color: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: 4px 4px 0 4px;
+  color: var(--color-text-primary);
+}
+
+/* Agent/System Message */
+.message-agent {
+  background-color: transparent;
+  border-left: 3px solid var(--color-accent-yellow);
+  padding-left: 16px;
+  color: var(--color-text-primary);
+}
+```
+
+#### Input Field
+```css
+.chat-input {
+  background-color: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: 0;
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  padding: 16px;
+  transition: border-color 0.3s ease;
+}
+
+.chat-input:focus {
+  border-color: var(--color-accent-yellow);
+  outline: none;
+}
+
+.chat-input::placeholder {
+  color: var(--color-text-muted);
+}
+```
+
+### Cards & Containers
+```css
+.card {
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 0; /* Sharp corners */
+  padding: 24px;
+}
+
+/* Optional: Corner bracket decorations (viewfinder style) */
+.card-bracketed {
+  position: relative;
+}
+
+.card-bracketed::before,
+.card-bracketed::after {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--color-text-secondary);
+}
+
+.card-bracketed::before {
+  top: 8px;
+  left: 8px;
+  border-right: none;
+  border-bottom: none;
+}
+
+.card-bracketed::after {
+  bottom: 8px;
+  right: 8px;
+  border-left: none;
+  border-top: none;
+}
+```
+
+### Dividers
+```css
+.divider {
+  border: none;
+  border-top: 1px solid var(--color-divider);
+  margin: 24px 0;
+}
+```
+
+---
+
+## Spacing System
+
+```css
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+}
+```
+
+---
+
+## Animation & Transitions
+
+```css
+:root {
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.3s ease;
+  --transition-slow: 0.5s ease;
+}
+```
+
+### Principles
+1. Keep animations subtle and purposeful
+2. Use ease timing for most transitions
+3. Avoid flashy or playful animations - maintain professional tone
+4. Loading states should be minimal (simple spinner or pulse)
+
+---
+
+## Iconography
+
+- Use minimal, geometric line icons
+- Icon stroke weight: 1.5-2px
+- Default icon color: `--color-text-secondary`
+- Active/hover icon color: `--color-text-primary` or accent colors
+
+---
+
+## Design Principles for Chat Interface
+
+### DO:
+- ✓ Use high contrast (white on black)
+- ✓ Keep corners sharp (0 or 2-4px radius max)
+- ✓ Use ALL CAPS for headers and labels
+- ✓ Maintain generous whitespace
+- ✓ Use accent colors sparingly for emphasis
+- ✓ Apply subtle textures/grain to backgrounds where appropriate
+- ✓ Use border-based buttons (outline style)
+
+### DON'T:
+- ✗ Use rounded corners (>4px radius)
+- ✗ Use gradients (solid colors only)
+- ✗ Mix multiple accent colors in one view
+- ✗ Use light backgrounds
+- ✗ Add playful or whimsical elements
+- ✗ Over-animate
+
+---
+
+## Example: Chat Message Component
+
+```tsx
+// Example structure for chat messages
+<div className="message message-agent">
+  <div className="message-header">
+    <span className="message-label">ADSOMNIA AGENT</span>
+    <span className="message-timestamp">12:34 PM</span>
+  </div>
+  <div className="message-content">
+    Here are your top performing landing pages for last week...
+  </div>
+</div>
+```
+
+---
+
+## Responsive Considerations
+
+- Mobile: Stack elements vertically, maintain dark theme
+- Tablet: Adapt spacing, consider sidebar collapse
+- Desktop: Full layout with generous spacing
+
+```css
+/* Breakpoints */
+--breakpoint-sm: 640px;
+--breakpoint-md: 768px;
+--breakpoint-lg: 1024px;
+--breakpoint-xl: 1280px;
+```
+
+---
+
+## Brand Voice in UI
+
+The interface should feel:
+- **Bold** - Confident statements, clear actions
+- **Direct** - No fluff, get to the point
+- **Professional** - Clean, business-focused
+- **Always On** - Ready, responsive, 24/7 energy
+
+Example copy patterns:
+- "GET STARTED" not "Click here to begin"
+- "VIEW REPORT" not "See your report"
+- "TRAFFIC NEVER SLEEPS" - embrace the tagline where appropriate
