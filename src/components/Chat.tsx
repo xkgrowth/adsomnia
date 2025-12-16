@@ -14,7 +14,8 @@ export default function Chat() {
     {
       id: "welcome",
       role: "assistant",
-      content: "👋 Hi! I'm your Adsomnia Data Agent. I can help you with:\n\n• **Analyze Landing Pages** - \"Which LP is best for Offer X?\"\n• **Export Reports** - \"Download fraud report for last week\"\n• **Performance Summaries** - \"How did we do this week?\"\n• **Generate Tracking Links** - \"Get link for Partner 123, Offer 456\"\n\nWhat would you like to know?",
+      content:
+        "Welcome to Adsomnia Data Agent. I can help you with:\n\n• **Analyze Landing Pages** — \"Which LP is best for Offer X?\"\n• **Export Reports** — \"Download fraud report for last week\"\n• **Performance Summaries** — \"How did we do this week?\"\n• **Generate Tracking Links** — \"Get link for Partner 123, Offer 456\"\n\nWhat would you like to know?",
       timestamp: new Date(),
     },
   ]);
@@ -51,7 +52,10 @@ export default function Chat() {
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: "🚧 **Coming Soon**\n\nThe agent is being built. This is a placeholder response.\n\nYour query: \"" + userMessage.content + "\"",
+        content:
+          "**Coming Soon**\n\nThe agent is being built. This is a placeholder response.\n\nYour query: \"" +
+          userMessage.content +
+          '"',
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, assistantMessage]);
@@ -66,10 +70,41 @@ export default function Chat() {
     }
   };
 
+  const formatContent = (content: string) => {
+    return content.split(/(\*\*.*?\*\*)/).map((part, i) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return (
+          <strong key={i} className="text-accent-yellow font-semibold">
+            {part.slice(2, -2)}
+          </strong>
+        );
+      }
+      return part;
+    });
+  };
+
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col h-full bg-bg-primary">
+      {/* Header */}
+      <div className="border-b border-border px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="font-headline text-2xl tracking-wide text-text-primary">
+              DATA AGENT
+            </h1>
+            <p className="font-mono text-xs tracking-widest text-text-muted mt-1">
+              TRAFFIC NEVER SLEEPS
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 bg-accent-yellow rounded-full animate-pulse" />
+            <span className="label-caps text-accent-yellow">ONLINE</span>
+          </div>
+        </div>
+      </div>
+
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
         {messages.map((message) => (
           <div
             key={message.id}
@@ -77,45 +112,63 @@ export default function Chat() {
               message.role === "user" ? "justify-end" : "justify-start"
             }`}
           >
-            <div
-              className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                message.role === "user"
-                  ? "bg-[var(--primary)] text-white"
-                  : "bg-[var(--surface)] border border-[var(--border)]"
-              }`}
-            >
-              <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                {message.content.split(/(\*\*.*?\*\*)/).map((part, i) => {
-                  if (part.startsWith("**") && part.endsWith("**")) {
-                    return <strong key={i}>{part.slice(2, -2)}</strong>;
-                  }
-                  return part;
-                })}
+            {message.role === "assistant" ? (
+              // Agent message - left accent border style
+              <div className="max-w-[85%]">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="label-caps text-accent-yellow">
+                    ADSOMNIA AGENT
+                  </span>
+                  <span className="text-xs text-text-muted font-mono">
+                    {message.timestamp.toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+                <div className="border-l-2 border-accent-yellow pl-4">
+                  <div className="text-sm leading-relaxed text-text-primary whitespace-pre-wrap">
+                    {formatContent(message.content)}
+                  </div>
+                </div>
               </div>
-              <div
-                className={`text-xs mt-2 ${
-                  message.role === "user"
-                    ? "text-white/60"
-                    : "text-[var(--muted)]"
-                }`}
-              >
-                {message.timestamp.toLocaleTimeString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+            ) : (
+              // User message - bordered box style
+              <div className="max-w-[85%]">
+                <div className="flex items-center justify-end gap-2 mb-2">
+                  <span className="text-xs text-text-muted font-mono">
+                    {message.timestamp.toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                  <span className="label-caps text-text-secondary">YOU</span>
+                </div>
+                <div className="border border-border bg-bg-tertiary px-4 py-3">
+                  <div className="text-sm leading-relaxed text-text-primary whitespace-pre-wrap">
+                    {message.content}
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         ))}
 
         {/* Typing indicator */}
         {isLoading && (
           <div className="flex justify-start message-enter">
-            <div className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl px-4 py-3">
-              <div className="flex gap-1">
-                <span className="typing-dot h-2 w-2 bg-[var(--muted)] rounded-full"></span>
-                <span className="typing-dot h-2 w-2 bg-[var(--muted)] rounded-full"></span>
-                <span className="typing-dot h-2 w-2 bg-[var(--muted)] rounded-full"></span>
+            <div className="max-w-[85%]">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="label-caps text-accent-yellow">
+                  ADSOMNIA AGENT
+                </span>
+              </div>
+              <div className="border-l-2 border-accent-yellow pl-4">
+                <div className="flex gap-1.5 py-2">
+                  <span className="typing-dot h-2 w-2 bg-accent-yellow" />
+                  <span className="typing-dot h-2 w-2 bg-accent-yellow" />
+                  <span className="typing-dot h-2 w-2 bg-accent-yellow" />
+                </div>
               </div>
             </div>
           </div>
@@ -125,31 +178,32 @@ export default function Chat() {
       </div>
 
       {/* Input */}
-      <div className="border-t border-[var(--border)] p-4">
-        <form onSubmit={handleSubmit} className="flex gap-3">
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Ask about your Everflow data..."
-            className="flex-1 resize-none rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent"
-            rows={1}
-            disabled={isLoading}
-          />
+      <div className="border-t border-border px-6 py-4">
+        <form onSubmit={handleSubmit} className="flex gap-4">
+          <div className="flex-1 relative">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask about your Everflow data..."
+              className="w-full resize-none border border-border bg-bg-tertiary px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-yellow transition-colors font-body"
+              rows={1}
+              disabled={isLoading}
+            />
+          </div>
           <button
             type="submit"
             disabled={isLoading || !input.trim()}
-            className="rounded-xl bg-[var(--primary)] px-6 py-3 text-sm font-medium text-white hover:bg-[var(--primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="btn-primary px-8"
           >
-            Send
+            SEND
           </button>
         </form>
-        <p className="text-xs text-[var(--muted)] mt-2 text-center">
-          Press Enter to send, Shift+Enter for new line
+        <p className="text-xs text-text-muted mt-3 text-center font-mono tracking-wide">
+          ENTER TO SEND • SHIFT+ENTER FOR NEW LINE
         </p>
       </div>
     </div>
   );
 }
-

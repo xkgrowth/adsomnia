@@ -2,39 +2,186 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================
+   ADSOMNIA DESIGN SYSTEM
+   "Traffic Never Sleeps"
+   ============================================ */
+
 :root {
-  --background: #0a0a0a;
-  --foreground: #ededed;
-  --primary: #10b981;
-  --primary-hover: #059669;
-  --surface: #171717;
-  --surface-hover: #262626;
-  --border: #262626;
-  --muted: #737373;
+  /* === BACKGROUNDS === */
+  --color-bg-primary: #000000;
+  --color-bg-secondary: #0A0A0A;
+  --color-bg-tertiary: #141414;
+  --color-bg-elevated: #1A1A1A;
+  
+  /* === TEXT === */
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #B3B3B3;
+  --color-text-muted: #666666;
+  
+  /* === ACCENT COLORS === */
+  --color-accent-yellow: #FFD700;
+  --color-accent-cyan: #00CFFF;
+  --color-accent-orange: #FF8C00;
+  
+  /* === SEMANTIC === */
+  --color-success: #5CB85C;
+  --color-error: #D9534F;
+  --color-warning: #FF8C00;
+  
+  /* === BORDERS & DIVIDERS === */
+  --color-border: #333333;
+  --color-border-hover: #555555;
+  --color-divider: #222222;
+  
+  /* === LEGACY MAPPING (for compatibility) === */
+  --background: var(--color-bg-primary);
+  --foreground: var(--color-text-primary);
+  --primary: var(--color-accent-yellow);
+  --primary-hover: #E5C100;
+  --surface: var(--color-bg-tertiary);
+  --surface-hover: var(--color-bg-elevated);
+  --border: var(--color-border);
+  --muted: var(--color-text-muted);
+  
+  /* === SPACING === */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  
+  /* === TRANSITIONS === */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.3s ease;
+  --transition-slow: 0.5s ease;
 }
 
+/* Force dark mode - no light mode for Adsomnia brand */
 @media (prefers-color-scheme: light) {
   :root {
-    --background: #ffffff;
-    --foreground: #171717;
-    --surface: #f5f5f5;
-    --surface-hover: #e5e5e5;
-    --border: #e5e5e5;
-    --muted: #737373;
+    --background: var(--color-bg-primary);
+    --foreground: var(--color-text-primary);
+    --surface: var(--color-bg-tertiary);
+    --surface-hover: var(--color-bg-elevated);
+    --border: var(--color-border);
+    --muted: var(--color-text-muted);
   }
 }
 
+/* ============================================
+   BASE STYLES
+   ============================================ */
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
-/* Chat message animations */
+/* Headlines - Bebas Neue */
+h1, h2, h3, h4, h5, h6,
+.font-headline {
+  font-family: 'Bebas Neue', 'Impact', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+
+/* Monospace - JetBrains Mono */
+code, pre, kbd,
+.font-mono {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ============================================
+   COMPONENT UTILITIES
+   ============================================ */
+
+/* Sharp corners - Adsomnia uses minimal border radius */
+.rounded-adsomnia {
+  border-radius: 2px;
+}
+
+/* Accent border left (for agent messages) */
+.border-accent-left {
+  border-left: 3px solid var(--color-accent-yellow);
+  padding-left: 16px;
+}
+
+/* Corner bracket decoration */
+.corner-brackets {
+  position: relative;
+}
+
+.corner-brackets::before,
+.corner-brackets::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--color-text-secondary);
+  pointer-events: none;
+}
+
+.corner-brackets::before {
+  top: 8px;
+  left: 8px;
+  border-right: none;
+  border-bottom: none;
+}
+
+.corner-brackets::after {
+  bottom: 8px;
+  right: 8px;
+  border-left: none;
+  border-top: none;
+}
+
+/* ============================================
+   BUTTON STYLES
+   ============================================ */
+
+.btn-primary {
+  @apply inline-flex items-center justify-center;
+  @apply border-2 border-[var(--color-accent-yellow)] bg-transparent;
+  @apply text-[var(--color-accent-yellow)] font-semibold uppercase tracking-wider;
+  @apply px-6 py-3 text-sm;
+  @apply transition-all duration-300;
+}
+
+.btn-primary:hover {
+  @apply bg-[var(--color-accent-yellow)] text-black;
+}
+
+.btn-primary:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center;
+  @apply border-2 border-[var(--color-text-primary)] bg-transparent;
+  @apply text-[var(--color-text-primary)] font-semibold uppercase tracking-wider;
+  @apply px-6 py-3 text-sm;
+  @apply transition-all duration-300;
+}
+
+.btn-secondary:hover {
+  @apply bg-[var(--color-text-primary)] text-black;
+}
+
+/* ============================================
+   CHAT ANIMATIONS
+   ============================================ */
+
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -68,25 +215,30 @@ body {
   animation-delay: 0.4s;
 }
 
-/* Scrollbar styling */
+/* ============================================
+   SCROLLBAR STYLING
+   ============================================ */
+
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--surface);
+  background: var(--color-bg-secondary);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 4px;
+  background: var(--color-border);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--muted);
+  background: var(--color-border-hover);
 }
 
-/* Sprint Planning View Animations */
+/* ============================================
+   SPRINT VIEW ANIMATIONS (preserved)
+   ============================================ */
+
 @keyframes gradient-shift {
   0%, 100% {
     background-position: 0% 50%;
@@ -114,15 +266,6 @@ body {
   }
 }
 
-@keyframes scan-line {
-  0% {
-    transform: translateY(-100%);
-  }
-  100% {
-    transform: translateY(100%);
-  }
-}
-
 .animate-gradient {
   background-size: 200% 200%;
   animation: gradient-shift 8s ease infinite;
@@ -136,7 +279,7 @@ body {
   animation: pulse-glow 2s ease-in-out infinite;
 }
 
-/* Glassmorphism utilities */
+/* Glass panels */
 .glass-panel {
   background: rgba(255, 255, 255, 0.02);
   backdrop-filter: blur(20px);
@@ -144,57 +287,49 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.glass-panel-light {
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-
-/* Neon glow utilities */
+/* Neon utilities */
 .neon-cyan {
-  text-shadow: 0 0 10px #00D9FF, 0 0 20px #00D9FF, 0 0 30px #00D9FF;
+  text-shadow: 0 0 10px #00CFFF, 0 0 20px #00CFFF;
 }
 
-.neon-magenta {
-  text-shadow: 0 0 10px #FF0080, 0 0 20px #FF0080, 0 0 30px #FF0080;
+.neon-yellow {
+  text-shadow: 0 0 10px #FFD700, 0 0 20px #FFD700;
 }
 
-.neon-gold {
-  text-shadow: 0 0 10px #FFD700, 0 0 20px #FFD700, 0 0 30px #FFD700;
+.neon-orange {
+  text-shadow: 0 0 10px #FF8C00, 0 0 20px #FF8C00;
 }
 
-.neon-green {
-  text-shadow: 0 0 10px #00FF94, 0 0 20px #00FF94, 0 0 30px #00FF94;
-}
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
 
-/* Sprint specific scrollbar styling */
-.sprint-view::-webkit-scrollbar {
-  width: 6px;
-}
-
-.sprint-view::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.sprint-view::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #00D9FF 0%, #FF0080 100%);
-  border-radius: 3px;
-}
-
-/* Tabular numbers for consistent digit widths */
+/* Tabular numbers for data */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
 
-/* Custom selection styling */
+/* Selection styling */
 ::selection {
-  background: rgba(0, 217, 255, 0.3);
+  background: rgba(255, 215, 0, 0.3);
   color: white;
 }
 
-/* Focus styles for accessibility */
-.sprint-view *:focus-visible {
-  outline: 2px solid #00D9FF;
+/* Focus styles */
+*:focus-visible {
+  outline: 2px solid var(--color-accent-yellow);
   outline-offset: 2px;
 }
 
+/* All caps label style */
+.label-caps {
+  @apply uppercase tracking-wider text-xs font-semibold;
+  color: var(--color-text-secondary);
+}
+
+/* Tagline style (monospace) */
+.tagline {
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
