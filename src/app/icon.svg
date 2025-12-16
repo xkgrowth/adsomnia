@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <style>
+      .square { fill: #000000; stroke: #ffffff; stroke-width: 1; stroke-dasharray: 2,2; }
+      .text { fill: #ffffff; font-family: Arial, sans-serif; font-size: 18px; font-weight: bold; }
+    </style>
+  </defs>
+  <g transform="rotate(-5 16 16)">
+    <rect class="square" x="2" y="2" width="28" height="28" rx="2"/>
+    <text class="text" x="16" y="22" text-anchor="middle" dominant-baseline="central">A!</text>
+  </g>
+</svg>
+

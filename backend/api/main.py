@@ -1,7 +1,16 @@
 """FastAPI application main entry point."""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.api.routes import workflows, health, chat
+from backend.api.routes import workflows, health, entities
+
+# Import chat route conditionally (may fail if LangChain dependencies are missing)
+try:
+    from backend.api.routes import chat
+    CHAT_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️  Warning: Chat route not available: {e}")
+    CHAT_AVAILABLE = False
+    chat = None
 
 # Create FastAPI app
 app = FastAPI(
@@ -24,7 +33,9 @@ app.add_middleware(
 # Include routers
 app.include_router(health.router)
 app.include_router(workflows.router)
-app.include_router(chat.router)
+if CHAT_AVAILABLE and chat:
+    app.include_router(chat.router)
+app.include_router(entities.router)
 
 
 @app.on_event("startup")

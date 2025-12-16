@@ -62,3 +62,48 @@ export async function checkHealth(): Promise<boolean> {
   }
 }
 
+export interface Affiliate {
+  affiliate_id: number;
+  affiliate_name: string;
+}
+
+export interface Offer {
+  offer_id: number;
+  offer_name: string;
+}
+
+export interface EntitiesResponse {
+  status: string;
+  affiliates: Affiliate[];
+  offers: Offer[];
+  affiliate_count: number;
+  offer_count: number;
+}
+
+/**
+ * Fetch real affiliates and offers from Everflow API
+ */
+export async function fetchEntities(): Promise<EntitiesResponse> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/entities/all?limit=5`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': API_KEY,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Failed to fetch entities');
+  }
+}
+

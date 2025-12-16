@@ -33,55 +33,39 @@ class EverflowClient:
         
         try:
             if method.upper() == "GET":
-                response = requests.get(url, headers=self.headers, params=data)
+                # For GET requests, data should be query parameters
+                response = requests.get(url, headers=self.headers, params=data, timeout=10)
             else:
-                response = requests.post(url, headers=self.headers, json=data)
+                # For POST requests, data should be JSON body
+                response = requests.post(url, headers=self.headers, json=data, timeout=10)
             
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
             print(f"API Error: {str(e)}")
-            if hasattr(e.response, 'text'):
+            if hasattr(e, 'response') and hasattr(e.response, 'text'):
                 print(f"Response: {e.response.text}")
             raise
     
     def get_affiliates(self, limit: int = 10) -> List[Dict]:
-        """Get list of affiliates/partners."""
-        # Using entity reporting to get affiliates
-        from datetime import datetime, timedelta
-        to_date = datetime.now()
-        from_date = to_date - timedelta(days=30)
-        
-        payload = {
-            "columns": [{"column": "affiliate"}],
-            "query": {"filters": []},
-            "from": from_date.strftime("%Y-%m-%d"),
-            "to": to_date.strftime("%Y-%m-%d"),
-            "timezone_id": self.timezone_id
-        }
-        
+        """Get list of affiliates/partners using the correct Everflow API endpoint."""
         try:
-            response = self._request("POST", "/v1/networks/reporting/entity", payload)
-            table = response.get("table", [])
+            # Use the correct endpoint: GET /v1/networks/affiliates
+            response = self._request("GET", "/v1/networks/affiliates")
+            data = response.get("affiliates", [])
             
-            # Extract unique affiliates - use ALL fields from API response
+            # Extract and format affiliates
             affiliates = []
-            seen_ids = set()
-            for row in table:
-                aff_id = row.get("affiliate_id")
-                if aff_id and aff_id not in seen_ids:
-                    seen_ids.add(aff_id)
-                    # Capture ALL affiliate fields from Everflow API response
+            for aff in data[:limit]:
+                aff_id = aff.get("network_affiliate_id")
+                if aff_id:
                     affiliates.append({
                         "affiliate_id": aff_id,
-                        "affiliate_name": row.get("affiliate_name") or row.get("affiliate") or f"Partner {aff_id}",
-                        # Include any other affiliate-related fields
-                        "affiliate": row.get("affiliate"),  # Sometimes the name is in this field
-                        # Store full row for additional context
-                        "_raw": {k: v for k, v in row.items() if k.startswith("affiliate")}
+                        "affiliate_name": aff.get("name", f"Partner {aff_id}"),
+                        # Include additional fields for reference
+                        "account_status": aff.get("account_status"),
+                        "_raw": aff  # Store full response for debugging
                     })
-                    if len(affiliates) >= limit:
-                        break
             
             return affiliates
         except Exception as e:
@@ -89,50 +73,25 @@ class EverflowClient:
             return []
     
     def get_offers(self, limit: int = 10) -> List[Dict]:
-        """Get list of offers."""
-        from datetime import datetime, timedelta
-        to_date = datetime.now()
-        from_date = to_date - timedelta(days=30)
-        
-        payload = {
-            "columns": [{"column": "offer"}],
-            "query": {"filters": []},
-            "from": from_date.strftime("%Y-%m-%d"),
-            "to": to_date.strftime("%Y-%m-%d"),
-            "timezone_id": self.timezone_id
-        }
-        
+        """Get list of offers using the correct Everflow API endpoint."""
         try:
-            response = self._request("POST", "/v1/networks/reporting/entity", payload)
-            table = response.get("table", [])
+            # Use the correct endpoint: GET /v1/networks/offers
+            response = self._request("GET", "/v1/networks/offers")
+            data = response.get("offers", [])
             
-            # Extract unique offers - use ALL fields from API response
+            # Extract and format offers
             offers = []
-            seen_ids = set()
-            for row in table:
-                offer_id = row.get("offer_id")
-                if offer_id and offer_id not in seen_ids:
-                    seen_ids.add(offer_id)
-                    # Capture ALL offer fields from Everflow API response
-                    # Try multiple field names: offer_name, advertiser_name, offer
-                    offer_name = (
-                        row.get("offer_name") or 
-                        row.get("advertiser_name") or 
-                        row.get("advertiser") or
-                        row.get("offer") or 
-                        f"Offer {offer_id}"
-                    )
+            for offer in data[:limit]:
+                offer_id = offer.get("network_offer_id")
+                if offer_id:
                     offers.append({
                         "offer_id": offer_id,
-                        "offer_name": offer_name,
-                        "advertiser_name": row.get("advertiser_name"),  # Explicit advertiser_name field
-                        "advertiser": row.get("advertiser"),  # Sometimes in this field
-                        "offer": row.get("offer"),  # Sometimes the name is in this field
-                        # Store full row for additional context
-                        "_raw": {k: v for k, v in row.items() if k.startswith(("offer", "advertiser"))}
+                        "offer_name": offer.get("name", f"Offer {offer_id}"),
+                        # Include additional fields for reference
+                        "advertiser_id": offer.get("network_advertiser_id"),
+                        "destination_url": offer.get("destination_url"),
+                        "_raw": offer  # Store full response for debugging
                     })
-                    if len(offers) >= limit:
-                        break
             
             return offers
         except Exception as e:

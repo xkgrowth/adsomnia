@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { sendChatMessage } from "@/lib/api";
+import { sendChatMessage, fetchEntities, type Affiliate, type Offer } from "@/lib/api";
 
 type Message = {
   id: string;
@@ -10,29 +10,90 @@ type Message = {
   timestamp: Date;
 };
 
-// Example queries - only working ones from QA tests
-const EXAMPLE_QUERIES = [
-  {
-    category: "Landing Pages",
-    queries: [
-      "Which landing pages work best for Summer Promo 2024?",
-      "Show me top 3 landing pages for offer 1001 in the US",
-    ],
-  },
-  {
-    category: "Performance",
-    queries: [
-      "Give me the weekly performance summary",
-      "What's our top performing geo this week?",
-    ],
-  },
-  {
-    category: "Export Reports",
-    queries: [
-      "Download fraud report for last week",
-    ],
-  },
-];
+type ExampleQueryCategory = {
+  category: string;
+  queries: string[];
+};
+
+// Get real IDs from environment variables if available, otherwise use test data
+const getFallbackAffiliates = (): Affiliate[] => {
+  // Check for environment variable override
+  const envAffiliates = process.env.NEXT_PUBLIC_AFFILIATE_IDS;
+  if (envAffiliates) {
+    try {
+      const ids = JSON.parse(envAffiliates);
+      return ids.map((aff: any) => ({
+        affiliate_id: typeof aff === 'number' ? aff : aff.id,
+        affiliate_name: typeof aff === 'object' ? aff.name : `Partner ${aff}`
+      }));
+    } catch (e) {
+      console.warn("Failed to parse NEXT_PUBLIC_AFFILIATE_IDS, using default");
+    }
+  }
+  // Default test data
+  return [
+    { affiliate_id: 12345, affiliate_name: "Premium Traffic Partners" },
+    { affiliate_id: 23456, affiliate_name: "Global Media Network" },
+    { affiliate_id: 34567, affiliate_name: "Digital Marketing Pro" },
+  ];
+};
+
+const getFallbackOffers = (): Offer[] => {
+  // Check for environment variable override
+  const envOffers = process.env.NEXT_PUBLIC_OFFER_IDS;
+  if (envOffers) {
+    try {
+      const ids = JSON.parse(envOffers);
+      return ids.map((offer: any) => ({
+        offer_id: typeof offer === 'number' ? offer : offer.id,
+        offer_name: typeof offer === 'object' ? offer.name : `Offer ${offer}`
+      }));
+    } catch (e) {
+      console.warn("Failed to parse NEXT_PUBLIC_OFFER_IDS, using default");
+    }
+  }
+  // Default test data
+  return [
+    { offer_id: 1001, offer_name: "Summer Promo 2024" },
+    { offer_id: 1002, offer_name: "Holiday Special" },
+    { offer_id: 1003, offer_name: "Evergreen Offer A" },
+  ];
+};
+
+const FALLBACK_AFFILIATES = getFallbackAffiliates();
+const FALLBACK_OFFERS = getFallbackOffers();
+
+// Generate example queries using real IDs
+const generateExampleQueries = (affiliates: Affiliate[], offers: Offer[]): ExampleQueryCategory[] => {
+  const aff1 = affiliates[0];
+  const aff2 = affiliates[1] || affiliates[0];
+  const offer1 = offers[0];
+  const offer2 = offers[1] || offers[0];
+  const offer3 = offers[2] || offers[0];
+
+  return [
+    {
+      category: "Landing Pages",
+      queries: [
+        offer1 ? `Which landing pages work best for ${offer1.offer_name}?` : "Which landing pages work best for Summer Promo 2024?",
+        offer1 ? `Show me top 3 landing pages for offer ${offer1.offer_id} in the US` : "Show me top 3 landing pages for offer 1001 in the US",
+        aff1 ? `What's the best converting LP for affiliate ${aff1.affiliate_id}?` : "What's the best converting LP for affiliate 12345?",
+        offer2 ? `Top landing pages for ${offer2.offer_name} in Germany` : "Top landing pages for Holiday Special in Germany",
+        offer2 ? `Which LPs perform best for offer ${offer2.offer_id}?` : "Which LPs perform best for offer 1002?",
+      ],
+    },
+    {
+      category: "Export Reports",
+      queries: [
+        "Export fraud report for last week",
+        offer1 ? `Download conversion data for offer ${offer1.offer_id} from December` : "Download conversion data for offer 1001 from December",
+        "Get me a CSV of conversions with sub1, sub2 for last month",
+        offer1 ? `Export stats for ${offer1.offer_name} from November 1st to 15th` : "Export stats for Summer Promo 2024 from November 1st to 15th",
+        aff1 ? `Pull a scrub analysis report for affiliate ${aff1.affiliate_id}` : "Pull a scrub analysis report for affiliate 12345",
+      ],
+    },
+  ];
+};
 
 export default function Chat() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -40,8 +101,48 @@ export default function Chat() {
   const [isLoading, setIsLoading] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [affiliates, setAffiliates] = useState<Affiliate[]>(FALLBACK_AFFILIATES);
+  const [offers, setOffers] = useState<Offer[]>(FALLBACK_OFFERS);
+  const [entitiesLoading, setEntitiesLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Fetch real entities on mount
+  useEffect(() => {
+    const loadEntities = async () => {
+      try {
+        setEntitiesLoading(true);
+        const data = await fetchEntities();
+        console.log("Fetched entities response:", JSON.stringify(data, null, 2));
+        console.log(`Affiliate count: ${data.affiliate_count}, Offer count: ${data.offer_count}`);
+        
+        if (data.affiliates && data.affiliates.length > 0) {
+          console.log(`✅ Loaded ${data.affiliates.length} real affiliates:`, data.affiliates);
+          setAffiliates(data.affiliates);
+        } else {
+          console.warn("⚠️  No affiliates returned from API, using fallback data");
+          console.warn("API returned:", data);
+        }
+        if (data.offers && data.offers.length > 0) {
+          console.log(`✅ Loaded ${data.offers.length} real offers:`, data.offers);
+          setOffers(data.offers);
+        } else {
+          console.warn("⚠️  No offers returned from API, using fallback data");
+          console.warn("API returned:", data);
+        }
+      } catch (err) {
+        console.error("❌ Failed to fetch real entities, using fallback data:", err);
+        // Keep fallback data
+      } finally {
+        setEntitiesLoading(false);
+      }
+    };
+
+    loadEntities();
+  }, []);
+
+  // Generate example queries with current entities
+  const exampleQueries = generateExampleQueries(affiliates, offers);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -51,14 +152,13 @@ export default function Chat() {
     scrollToBottom();
   }, [messages]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isLoading) return;
+  const submitMessage = async (messageContent: string) => {
+    if (!messageContent.trim() || isLoading) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: input.trim(),
+      content: messageContent.trim(),
       timestamp: new Date(),
     };
 
@@ -101,6 +201,11 @@ export default function Chat() {
     }
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitMessage(input);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -109,11 +214,8 @@ export default function Chat() {
   };
 
   const handleExampleClick = (query: string) => {
-    setInput(query);
-    // Auto-focus the textarea
-    setTimeout(() => {
-      inputRef.current?.focus();
-    }, 0);
+    // Automatically submit the example query
+    submitMessage(query);
   };
 
   const formatContent = (content: string) => {
@@ -151,7 +253,7 @@ export default function Chat() {
             <div className="max-w-[85%]">
               <div className="border-l-2 border-accent-yellow pl-4">
                 <div className="space-y-4">
-                  {EXAMPLE_QUERIES.map((category, catIdx) => (
+                  {exampleQueries.map((category, catIdx) => (
                     <div key={catIdx} className="space-y-2">
                       <div className="text-xs font-semibold text-accent-yellow uppercase tracking-wide mb-2">
                         {category.category}
