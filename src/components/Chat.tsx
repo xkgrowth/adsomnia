@@ -85,24 +85,6 @@ export default function Chat() {
 
   return (
     <div className="flex flex-1 flex-col h-full bg-bg-primary">
-      {/* Header */}
-      <div className="border-b border-border px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="font-headline text-2xl tracking-wide text-text-primary">
-              DATA AGENT
-            </h1>
-            <p className="font-mono text-xs tracking-widest text-text-muted mt-1">
-              TRAFFIC NEVER SLEEPS
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 bg-accent-yellow rounded-full animate-pulse" />
-            <span className="label-caps text-accent-yellow">ONLINE</span>
-          </div>
-        </div>
-      </div>
-
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
         {messages.map((message) => (
