@@ -1,0 +1,16 @@
+# LangChain Workflow Agent Dependencies
+langchain>=0.3.0
+langgraph>=0.2.0
+langchain-community>=0.3.0
+langchain-google-genai>=1.0.0
+
+# Database (optional, for legacy SQL agent)
+sqlalchemy>=2.0.0
+
+# Utilities
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# Optional: LangGraph Studio
+langgraph-cli[inmem]>=0.4.0
+
