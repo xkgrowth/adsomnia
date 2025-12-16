@@ -23,15 +23,29 @@ export default function Home() {
                 TALK-TO-DATA
               </p>
             </div>
+            {/* Online indicator */}
+            <div className="flex items-center gap-2 ml-2">
+              <span className="w-2 h-2 bg-success rounded-full animate-pulse" />
+              <span className="label-caps text-success">ONLINE</span>
+            </div>
           </div>
           
-          {/* Optional: Quick status or nav */}
+          {/* Main navigation */}
           <nav className="hidden sm:flex items-center gap-6">
-            <span className="label-caps text-text-secondary hover:text-text-primary cursor-pointer transition-colors">
-              DASHBOARD
+            <span className="label-caps !text-text-primary !font-bold cursor-pointer transition-colors">
+              CHAT
             </span>
-            <span className="label-caps text-text-secondary hover:text-text-primary cursor-pointer transition-colors">
-              REPORTS
+            <span className="label-caps text-text-secondary/50 cursor-not-allowed transition-colors flex items-center gap-2">
+              ALERT
+              <span className="text-[8px] px-1.5 py-0.5 bg-accent-orange/20 text-accent-orange rounded font-mono">
+                SOON
+              </span>
+            </span>
+            <span className="label-caps text-text-secondary/50 cursor-not-allowed transition-colors flex items-center gap-2">
+              CREATE
+              <span className="text-[8px] px-1.5 py-0.5 bg-accent-orange/20 text-accent-orange rounded font-mono">
+                SOON
+              </span>
             </span>
           </nav>
         </div>
