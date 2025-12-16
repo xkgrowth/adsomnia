@@ -115,6 +115,11 @@ Would you like me to provide more details?
 ```
 
 ## Key Documents
-- `agents/workflows/WF4_default_lp_alert.md` - Full WF4 spec
-- `agents/workflows/WF5_paused_partner_check.md` - Full WF5 spec
+- `docs/workflows/WF4_default_lp_alert.md` - Full WF4 spec
+- `docs/workflows/WF5_paused_partner_check.md` - Full WF5 spec
+
+
+
+
+
 

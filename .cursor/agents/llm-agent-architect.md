@@ -73,6 +73,11 @@ ENTITIES = {
 ```
 
 ## Key Documents
-- `agents/shared/agent_context.md` - Full intent/entity patterns
-- `agents/workflows/WF*.md` - User intent examples per workflow
+- `docs/shared/agent_context.md` - Full intent/entity patterns
+- `docs/workflows/WF*.md` - User intent examples per workflow
+
+
+
+
+
 

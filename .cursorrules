@@ -18,10 +18,10 @@ See `.cursor/agents/README.md` for full agent documentation.
 ## Key Documentation (Always Reference)
 - `README.md` - Project overview and quick start
 - `ARCHITECTURE.md` - System design, tech stack, and data flow
-- `agents/` - Workflow specifications and agent behaviors
-- `agents/workflows/` - Individual workflow implementation specs
-- `agents/api/everflow_api_reference.md` - Everflow API endpoints and payloads
-- `agents/shared/agent_context.md` - Shared agent behavior and guidelines
+- `docs/` - Workflow specifications and reference documentation
+- `docs/workflows/` - Individual workflow implementation specs
+- `docs/api/everflow_api_reference.md` - Everflow API endpoints and payloads
+- `docs/shared/agent_context.md` - Shared agent behavior and guidelines
 - `.cursor/agents/` - Execution agent definitions
 
 ## Core Workflows (Priority Order)
@@ -58,8 +58,8 @@ See `.cursor/agents/README.md` for full agent documentation.
 - API keys via environment variables only
 
 ## When Implementing Features
-1. Always check the relevant workflow spec in `agents/workflows/`
-2. Reference `agents/api/everflow_api_reference.md` for payloads
-3. Follow patterns in `agents/shared/agent_context.md`
+1. Always check the relevant workflow spec in `docs/workflows/`
+2. Reference `docs/api/everflow_api_reference.md` for payloads
+3. Follow patterns in `docs/shared/agent_context.md`
 4. Ensure error messages are user-friendly (natural language)
 

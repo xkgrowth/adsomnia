@@ -50,7 +50,7 @@ adsomnia/
 ├── .cursorrules              # AI assistant context
 ├── README.md                 # This file
 ├── ARCHITECTURE.md           # Detailed system design
-├── agents/
+├── docs/
 │   ├── workflows/            # Individual workflow specs
 │   │   ├── WF1_generate_tracking_links.md
 │   │   ├── WF2_top_performing_lps.md
@@ -102,8 +102,8 @@ cp .env.example .env
 ## 📚 Documentation
 
 - **[ARCHITECTURE.md](./ARCHITECTURE.md)** - System design and technical decisions
-- **[agents/](./agents/)** - Workflow specifications and agent behavior
-- **[agents/api/](./agents/api/)** - Everflow API reference
+- **[docs/](./docs/)** - Workflow specifications and reference docs
+- **[docs/api/](./docs/api/)** - Everflow API reference
 
 ## 🤝 Client
 
@@ -112,4 +112,9 @@ cp .env.example .env
 ---
 
 *Built by blablabuild • December 2025*
+
+
+
+
+
 

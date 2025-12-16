@@ -102,8 +102,8 @@ Senior Frontend/Full-Stack Engineer responsible for the conversational user inte
 
 ## Key Documents
 - `ARCHITECTURE.md` - System design
-- `agents/shared/agent_context.md` - Response templates
-- `agents/workflows/WF*.md` - UI requirements per workflow
+- `docs/shared/agent_context.md` - Response templates
+- `docs/workflows/WF*.md` - UI requirements per workflow
 - **`.cursor/rules/chat-interface-design.mdc`** - **CRITICAL: Brand design guidelines**
 
 ---

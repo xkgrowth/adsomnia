@@ -27,7 +27,7 @@ Senior Integration Engineer and Everflow API specialist. Owns the API wrapper, p
 - Payload construction helpers for all 6 workflows
 - Response parsers that extract relevant metrics
 - Error handling and retry logic for API calls
-- API documentation updates (`agents/api/everflow_api_reference.md`)
+- API documentation updates (`docs/api/everflow_api_reference.md`)
 - Rate limit management utilities
 
 ## Expertise Breadth
@@ -82,6 +82,11 @@ Content-Type: application/json
 > Columns MUST be objects with `column` key, NOT plain strings!
 
 ## Key Documents
-- `agents/api/everflow_api_reference.md` - Full API documentation
+- `docs/api/everflow_api_reference.md` - Full API documentation
 - `.env` - API key configuration
+
+
+
+
+
 

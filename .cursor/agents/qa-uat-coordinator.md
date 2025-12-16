@@ -129,6 +129,11 @@ Senior QA Engineer and Client Success Lead responsible for ensuring all workflow
 ```
 
 ## Key Documents
-- `agents/workflows/WF*.md` - Acceptance criteria per workflow
-- `agents/shared/error_handling.md` - Error scenarios to test
+- `docs/workflows/WF*.md` - Acceptance criteria per workflow
+- `docs/shared/error_handling.md` - Error scenarios to test
+
+
+
+
+
 

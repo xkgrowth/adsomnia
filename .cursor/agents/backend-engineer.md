@@ -111,6 +111,11 @@ class BaseWorkflow(ABC):
 
 ## Key Documents
 - `ARCHITECTURE.md` - System design
-- `agents/workflows/WF*.md` - Workflow specifications
-- `agents/shared/error_handling.md` - Error patterns
+- `docs/workflows/WF*.md` - Workflow specifications
+- `docs/shared/error_handling.md` - Error patterns
+
+
+
+
+
 

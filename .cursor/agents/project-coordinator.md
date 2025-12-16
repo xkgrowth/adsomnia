@@ -61,7 +61,7 @@ Senior Project Manager responsible for end-to-end execution of the Adsomnia "Tal
 
 ## Sprint Planning Files
 - **Source of Truth:** `SPRINT_PLANNING.md` in project root
-- **Reference Docs:** `agents/workflows/WF*.md` for each workflow spec
+- **Reference Docs:** `docs/workflows/WF*.md` for each workflow spec
 
 ## Task Status Values
 - `open` - Task not started
@@ -76,4 +76,9 @@ Before marking any task as complete:
 3. ✅ Note any dependencies unblocked for other tasks
 4. ✅ Communicate status to relevant agents
 5. ✅ Update any related documentation
+
+
+
+
+
 

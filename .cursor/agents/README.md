@@ -19,7 +19,7 @@ This folder contains specialized agent definitions for the Talk-to-Data project.
 Reference agents in your prompts using `@agent-name`:
 
 ```
-@backend-engineer implement the WF2 workflow following the spec in agents/workflows/WF2_top_performing_lps.md
+@backend-engineer implement the WF2 workflow following the spec in docs/workflows/WF2_top_performing_lps.md
 ```
 
 ```
@@ -56,10 +56,10 @@ Agents should defer to specialists:
 Each agent should reference these shared documents:
 
 - `ARCHITECTURE.md` - System design
-- `agents/workflows/WF*.md` - Workflow specifications
-- `agents/api/everflow_api_reference.md` - API documentation
-- `agents/shared/agent_context.md` - Agent behavior patterns
-- `agents/shared/error_handling.md` - Error patterns
+- `docs/workflows/WF*.md` - Workflow specifications
+- `docs/api/everflow_api_reference.md` - API documentation
+- `docs/shared/agent_context.md` - Agent behavior patterns
+- `docs/shared/error_handling.md` - Error patterns
 - **`.cursor/rules/chat-interface-design.mdc`** - **Brand design guidelines (CRITICAL for UI work)**
 
 ## Design System
