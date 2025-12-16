@@ -27,7 +27,6 @@
   },
   "homepage": "https://github.com/xkgrowth/adsomnia#readme",
   "dependencies": {
-    "@tailwindcss/postcss": "^4.1.18",
     "@types/node": "^22.15.21",
     "@types/react": "^19.1.6",
     "autoprefixer": "^10.4.21",
