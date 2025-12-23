@@ -37,8 +37,13 @@ WORKFLOW_DESCRIPTIONS = {
       * Always parse date ranges from the user query and calculate the days parameter
     - min_leads: Minimum conversions for significance (default: 20)
     - top_n: Number of results to return (default: 10)
+    - label: Optional label filter (e.g., "Advertiser_Internal")
+    - metrics: Optional JSON string of specific metrics to include (e.g., '["cv", "cvr", "revenue"]')
+      * Available metrics: ["cv", "cvr", "epc", "rpc", "payout", "revenue", "clicks", "profit"]
+      * Default (if not specified): ["cv", "cvr", "epc", "rpc", "payout"]
+      * Analyze user query to determine which metrics are most relevant
     
-    Returns top N landing pages sorted by conversion rate.
+    Returns top N landing pages sorted by conversion rate (or most relevant metric if CVR not available).
     """,
     
     "wf3_export_report": """
@@ -140,7 +145,8 @@ def wf2_identify_top_lps(
     days: int = 30,
     min_leads: int = 20,
     top_n: int = 10,
-    label: Optional[str] = None
+    label: Optional[str] = None,
+    metrics: Optional[str] = None  # JSON string of requested metrics: ["cv", "cvr", "epc", "rpc", "payout", "revenue", "clicks", "profit"]
 ) -> str:
     """
     Find top performing landing pages for an offer.
@@ -152,6 +158,10 @@ def wf2_identify_top_lps(
         min_leads: Minimum conversions for significance (default: 20)
         top_n: Number of results to return (default: 10)
         label: Optional label filter (e.g., "Advertiser_Internal")
+        metrics: Optional JSON string of specific metrics to include. 
+                Available: ["cv", "cvr", "epc", "rpc", "payout", "revenue", "clicks", "profit"]
+                If not provided, returns all default metrics (cv, cvr, epc, rpc, payout)
+                Examples: '["cv", "cvr", "revenue"]' or '["clicks", "conversions", "cvr"]'
     
     Returns:
         JSON string with top N landing pages
@@ -313,6 +323,33 @@ def wf2_identify_top_lps(
                 "message": f"Failed to fetch landing page data from Everflow API: {error_msg}"
             })
         
+        # Parse requested metrics (if provided)
+        requested_metrics = None
+        if metrics:
+            try:
+                requested_metrics = json.loads(metrics) if isinstance(metrics, str) else metrics
+                if not isinstance(requested_metrics, list):
+                    requested_metrics = None
+            except:
+                requested_metrics = None
+        
+        # Default metrics if none specified (standard WF2 columns)
+        default_metrics = ["cv", "cvr", "epc", "rpc", "payout"]
+        if requested_metrics is None:
+            requested_metrics = default_metrics
+        
+        # Normalize metric names (handle aliases)
+        metric_aliases = {
+            "conversions": "cv",
+            "conversion_rate": "cvr",
+            "earnings_per_click": "epc",
+            "revenue_per_click": "rpc",
+            "total_payout": "payout",
+            "total_revenue": "revenue",
+            "total_clicks": "clicks"
+        }
+        normalized_metrics = [metric_aliases.get(m.lower(), m.lower()) for m in requested_metrics]
+        
         # Process results
         # Note: Everflow API returns data in a nested structure:
         # - row["columns"] contains column data (offer_url, offer, etc.)
@@ -321,14 +358,27 @@ def wf2_identify_top_lps(
         for row in table:
             # Extract reporting metrics
             reporting = row.get("reporting", {})
-            clicks = reporting.get("total_click", 0) or reporting.get("clicks", 0)
-            conversions = reporting.get("cv", 0) or reporting.get("total_cv", 0) or reporting.get("conversions", 0)
+            clicks = reporting.get("total_click", 0) or reporting.get("clicks", 0) or 0
+            conversions = reporting.get("cv", 0) or reporting.get("total_cv", 0) or reporting.get("conversions", 0) or 0
+            revenue = reporting.get("revenue", 0.0) or 0.0
+            payout = reporting.get("payout", 0.0) or 0.0
+            profit = reporting.get("profit", 0.0) or (revenue - payout)
             # CVR is already calculated by API (as percentage, e.g., 1.003 = 1.003%)
-            cvr = reporting.get("cvr", 0.0)
+            cvr = reporting.get("cvr", 0.0) or 0.0
             
             # Filter by minimum conversions
             if conversions < min_leads:
                 continue
+            
+            # Calculate EPC (Earnings Per Click) = Payout / Clicks
+            epc = round(payout / clicks, 4) if clicks > 0 else 0.0
+            
+            # Calculate RPC (Revenue Per Click) = Revenue / Clicks
+            rpc = round(revenue / clicks, 4) if clicks > 0 else 0.0
+            
+            # Extract offer info from columns array
+            offer_id = None
+            offer_name = "Unknown Offer"
             
             # Extract landing page info from columns array
             lp_id = None
@@ -336,26 +386,78 @@ def wf2_identify_top_lps(
             
             columns = row.get("columns", [])
             for col in columns:
-                if col.get("column_type") == "offer_url":
+                col_type = col.get("column_type")
+                if col_type == "offer":
+                    offer_id = col.get("id")
+                    offer_name = col.get("label", f"Offer {offer_id}")
+                elif col_type == "offer_url":
                     lp_id = col.get("id")
                     lp_name = col.get("label", f"LP {lp_id}")
-                    break
             
-            # If no offer_url column found, try to get from row directly
+            # Fallback: try to get from row directly if not found in columns
+            if not offer_id:
+                offer_id = row.get("offer_id")
+                offer_name = row.get("offer_name") or row.get("advertiser_name") or row.get("offer") or f"Offer {offer_id or 'Unknown'}"
+            
             if not lp_id:
                 lp_id = row.get("offer_url_id")
                 lp_name = row.get("offer_url_name") or row.get("offer_url") or f"LP {lp_id or 'Unknown'}"
             
-            processed_lps.append({
+            # Build result dict with all available metrics
+            lp_data = {
+                "offer_id": offer_id,
+                "offer_name": offer_name,
                 "offer_url_id": lp_id,
                 "offer_url_name": lp_name,
+                "cv": int(conversions),  # CV = Conversions
+                "cvr": round(cvr, 2),  # CVR = Conversion Rate (as percentage)
+                "epc": epc,  # EPC = Earnings Per Click (Payout / Clicks)
+                "rpc": rpc,  # RPC = Revenue Per Click (Revenue / Clicks)
+                "payout": round(payout, 2),
+                "revenue": round(revenue, 2),
+                "profit": round(profit, 2),
                 "clicks": int(clicks),
+                # Keep these for backwards compatibility and sorting
                 "conversions": int(conversions),
-                "conversion_rate": round(cvr, 2)  # API already provides CVR as percentage
-            })
+                "conversion_rate": round(cvr, 2)
+            }
+            
+            # Filter to only include requested metrics (plus always-include fields)
+            # Always include: offer_name, offer_url_name (these are identifiers, not metrics)
+            filtered_data = {
+                "offer_id": lp_data["offer_id"],
+                "offer_name": lp_data["offer_name"],
+                "offer_url_id": lp_data["offer_url_id"],
+                "offer_url_name": lp_data["offer_url_name"]
+            }
+            
+            # Add requested metrics
+            for metric in normalized_metrics:
+                if metric in lp_data:
+                    filtered_data[metric] = lp_data[metric]
+            
+            processed_lps.append(filtered_data)
         
-        # Sort by conversion rate (descending)
-        processed_lps.sort(key=lambda x: x["conversion_rate"], reverse=True)
+        # Sort by conversion rate (descending) if available, otherwise by CV, otherwise by first available metric
+        def get_sort_key(x):
+            # Try conversion_rate first (for backwards compatibility)
+            if "conversion_rate" in x:
+                return x["conversion_rate"]
+            # Try cvr (new format)
+            if "cvr" in x:
+                return x["cvr"]
+            # Try cv/conversions
+            if "cv" in x:
+                return x["cv"]
+            if "conversions" in x:
+                return x["conversions"]
+            # Fallback to first numeric metric
+            for key in ["revenue", "payout", "clicks", "epc", "rpc"]:
+                if key in x:
+                    return x[key]
+            return 0
+        
+        processed_lps.sort(key=get_sort_key, reverse=True)
         
         # Return top N (or all if top_n is very large, meaning "show all")
         if top_n >= 1000:

@@ -190,7 +190,7 @@ export default function Chat() {
   }, [messages]);
 
   // Parse report data from LLM response (detect markdown tables)
-  const parseReportData = (content: string): ReportData | null => {
+  const parseReportData = (content: string, metadata?: { reportType?: string; dateRange?: string }): ReportData | null => {
     // Look for markdown tables in the response - more flexible regex
     // Matches: header row, separator row (with dashes), and data rows
     const tableRegex = /\|(.+)\|\s*\n\s*\|[-\s|:]+\|\s*\n((?:\|.+\|\s*\n?)+)/g;
@@ -232,6 +232,9 @@ export default function Chat() {
           return {
             columns: columns.map(col => ({ key: col, label: col, sortable: true })),
             rows,
+            metadata: {
+              reportType: 'stats',
+            },
           };
         }
       }
@@ -270,6 +273,9 @@ export default function Chat() {
     return {
       columns,
       rows,
+      metadata: metadata || {
+        reportType: 'stats',
+      },
     };
   };
 
@@ -380,10 +386,6 @@ export default function Chat() {
         setThreadId(response.thread_id);
       }
 
-      // Parse report data from response
-      const reportData = parseReportData(response.response);
-      const hasReport = hasReportData(response.response);
-
       // Extract date range from response if available
       let dateRange = 'last 30 days';
       if (response.response.toLowerCase().includes('year to date') || response.response.toLowerCase().includes('ytd')) {
@@ -395,10 +397,24 @@ export default function Chat() {
       }
 
       // Extract report type from response
-      let reportType = 'stats';
-      if (response.response.toLowerCase().includes('landing page')) {
-        reportType = 'landing_pages';
+      let reportType = 'wf2'; // Default to WF2 (landing pages/entity reports)
+      if (response.response.toLowerCase().includes('landing page') || response.response.toLowerCase().includes('top landing')) {
+        reportType = 'wf2';
+      } else if (response.response.toLowerCase().includes('conversion') && response.response.toLowerCase().includes('fraud')) {
+        reportType = 'wf3_fraud';
+      } else if (response.response.toLowerCase().includes('conversion')) {
+        reportType = 'wf3_conversions';
+      } else if (response.response.toLowerCase().includes('variance')) {
+        reportType = 'wf3_variance';
+      } else if (response.response.toLowerCase().includes('scrub')) {
+        reportType = 'wf3_scrub';
+      } else if (response.response.toLowerCase().includes('stats')) {
+        reportType = 'wf3_stats';
       }
+
+      // Parse report data from response with metadata
+      const reportData = parseReportData(response.response, { reportType, dateRange });
+      const hasReport = hasReportData(response.response);
 
       // Store the original user query for fetching full reports
       const assistantMessage: Message = {
@@ -480,13 +496,13 @@ export default function Chat() {
         
         // Determine default sort column based on table type
         const getDefaultSortColumn = (cols: string[]): { column: string; direction: 'asc' | 'desc' } | null => {
-          // For landing pages, sort by Conversion Rate (desc) or Conversions (desc)
+          // For landing pages, sort by Conversion Rate (CVR) or Conversions (CV) (desc)
           const lowerCols = cols.map(c => c.toLowerCase());
-          if (lowerCols.includes('conversion rate')) {
-            return { column: 'conversion rate', direction: 'desc' };
+          if (lowerCols.includes('cvr') || lowerCols.includes('conversion rate')) {
+            return { column: lowerCols.includes('cvr') ? 'cvr' : 'conversion rate', direction: 'desc' };
           }
-          if (lowerCols.includes('conversions')) {
-            return { column: 'conversions', direction: 'desc' };
+          if (lowerCols.includes('cv') || lowerCols.includes('conversions')) {
+            return { column: lowerCols.includes('cv') ? 'cv' : 'conversions', direction: 'desc' };
           }
           if (lowerCols.includes('revenue')) {
             return { column: 'revenue', direction: 'desc' };

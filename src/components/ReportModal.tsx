@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from "react";
 import { X, Download, ChevronDown, ChevronRight } from "lucide-react";
+import { getAvailableExportFields, getFieldsByCategory, type ExportField } from "@/lib/everflowFields";
 
 export interface ReportRow {
   id: string;
@@ -300,6 +301,7 @@ export default function ReportModal({
           <ExportFieldSelector
             availableColumns={data.columns}
             selectedRows={selectedRowsData}
+            reportType={data.metadata?.reportType}
             onExport={(selectedColumns) => {
               if (onExport) {
                 onExport(selectedRowsData, selectedColumns);
@@ -317,6 +319,7 @@ export default function ReportModal({
 interface ExportFieldSelectorProps {
   availableColumns: string[];
   selectedRows: ReportRow[];
+  reportType?: string;
   onExport: (selectedColumns: string[]) => void;
   onClose: () => void;
 }
@@ -324,9 +327,15 @@ interface ExportFieldSelectorProps {
 function ExportFieldSelector({
   availableColumns,
   selectedRows,
+  reportType,
   onExport,
   onClose,
 }: ExportFieldSelectorProps) {
+  // Get all available Everflow export fields
+  const allExportFields = getAvailableExportFields(reportType);
+  const fieldsByCategory = getFieldsByCategory(allExportFields);
+  
+  // Initialize with table columns selected by default
   const [selectedColumns, setSelectedColumns] = useState<Set<string>>(
     new Set(availableColumns)
   );
@@ -364,7 +373,7 @@ function ExportFieldSelector({
 
         <div className="flex-1 overflow-auto p-4">
           <p className="text-sm text-text-secondary mb-4">
-            Select the columns to include in your CSV export.
+            Select the fields to include in your CSV export. All available Everflow API export fields are shown below.
             {selectedRows.length > 0 && (
               <span className="block mt-1">
                 Exporting {selectedRows.length} selected row
@@ -373,20 +382,36 @@ function ExportFieldSelector({
             )}
           </p>
 
-          <div className="space-y-2">
-            {availableColumns.map((column) => (
-              <label
-                key={column}
-                className="flex items-center gap-2 p-2 hover:bg-bg-secondary rounded cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedColumns.has(column)}
-                  onChange={() => toggleColumn(column)}
-                  className="w-4 h-4 border-2 border-accent-yellow rounded bg-bg-primary cursor-pointer checked:bg-accent-yellow checked:border-accent-yellow focus:ring-2 focus:ring-accent-yellow focus:ring-offset-2 focus:ring-offset-bg-primary transition-colors"
-                />
-                <span className="text-sm text-text-primary">{column}</span>
-              </label>
+          <div className="space-y-4">
+            {Object.entries(fieldsByCategory).map(([category, fields]) => (
+              <div key={category}>
+                <h4 className="text-xs font-semibold text-accent-yellow uppercase tracking-wider mb-2">
+                  {category}
+                </h4>
+                <div className="space-y-1">
+                  {fields.map((field) => (
+                    <label
+                      key={field.id}
+                      className="flex items-center gap-2 p-2 hover:bg-bg-secondary rounded cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedColumns.has(field.id)}
+                        onChange={() => toggleColumn(field.id)}
+                        className="w-4 h-4 border-2 border-accent-yellow rounded bg-bg-primary cursor-pointer checked:bg-accent-yellow checked:border-accent-yellow focus:ring-2 focus:ring-accent-yellow focus:ring-offset-2 focus:ring-offset-bg-primary transition-colors"
+                      />
+                      <div className="flex-1">
+                        <span className="text-sm text-text-primary">{field.label}</span>
+                        {field.description && (
+                          <span className="text-xs text-text-secondary block mt-0.5">
+                            {field.description}
+                          </span>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </div>
