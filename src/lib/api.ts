@@ -2,6 +2,8 @@
  * API client for Adsomnia backend
  */
 
+import type { ReportRow } from '@/components/ReportModal';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || 'your-secret-api-key-here';
 
@@ -167,7 +169,7 @@ export async function fetchEntities(): Promise<EntitiesResponse> {
 // Report-related interfaces and functions
 export interface ReportData {
   columns: string[];
-  rows: Array<Record<string, any>>;
+  rows: ReportRow[];
   metadata?: {
     reportType?: string;
     dateRange?: string;
