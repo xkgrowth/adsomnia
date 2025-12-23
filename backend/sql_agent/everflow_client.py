@@ -421,51 +421,72 @@ class EverflowClient:
         """
         Fetch conversion data for viewing (not exporting).
         
+        Uses the conversions/export endpoint to get a CSV download URL,
+        then downloads and parses the CSV to return JSON data.
+        
         Args:
             columns: List of column names to include
             filters: List of filter dictionaries
             from_date: Start date (YYYY-MM-DD)
             to_date: End date (YYYY-MM-DD)
-            page: Page number (default: 1)
-            page_size: Results per page (default: 50)
+            page: Page number (default: 1) - Note: CSV export doesn't support pagination
+            page_size: Results per page (default: 50) - Note: CSV export returns all results
         
         Returns:
             Dictionary with conversion data, summary, and pagination info
         """
+        import csv
+        import io
+        
+        # Use the conversions/export endpoint
         payload = {
             "columns": columns,
             "query": {"filters": filters},
             "from": from_date,
             "to": to_date,
-            "timezone_id": self.timezone_id,
-            "page": page,
-            "page_size": page_size
+            "format": "csv",
+            "timezone_id": self.timezone_id
         }
         
-        # Use the entity reporting endpoint for viewing conversions
-        # The conversions/export endpoint is only for CSV exports
-        # For viewing, we use entity reporting with conversion-specific columns
-        print(f"🔍 Calling Everflow API: POST /v1/networks/reporting/entity")
+        print(f"🔍 Calling Everflow API: POST /v1/networks/reporting/conversions/export")
         print(f"🔍 Payload: {json.dumps(payload, indent=2)}")
         try:
-            # Convert columns to the format expected by entity reporting
-            # Entity reporting expects columns as objects: [{"column": "offer"}, {"column": "affiliate"}]
-            entity_columns = [{"column": col} for col in columns]
+            # Get the CSV download URL
+            response = self._request("POST", "/v1/networks/reporting/conversions/export", payload)
+            download_url = response.get("download_url") or response.get("url")
             
-            # Update payload format for entity reporting
-            entity_payload = {
-                "columns": entity_columns,
-                "query": {"filters": filters},
-                "from": from_date,
-                "to": to_date,
-                "timezone_id": self.timezone_id,
-                "page": page,
-                "page_size": page_size
+            if not download_url:
+                raise Exception("No download URL returned from Everflow API")
+            
+            print(f"🔍 Download URL: {download_url}")
+            
+            # Download the CSV file
+            csv_response = requests.get(download_url, timeout=30)
+            csv_response.raise_for_status()
+            
+            # Parse CSV
+            csv_content = csv_response.text
+            csv_reader = csv.DictReader(io.StringIO(csv_content))
+            conversions = list(csv_reader)
+            
+            print(f"✅ Parsed {len(conversions)} conversions from CSV")
+            
+            # Apply pagination manually (since CSV export doesn't support it)
+            start_idx = (page - 1) * page_size
+            end_idx = start_idx + page_size
+            paginated_conversions = conversions[start_idx:end_idx]
+            
+            # Return in the expected format
+            return {
+                "table": paginated_conversions,
+                "conversions": paginated_conversions,  # Alias for compatibility
+                "paging": {
+                    "current_page": page,
+                    "page_size": page_size,
+                    "total_count": len(conversions),
+                    "total_pages": (len(conversions) + page_size - 1) // page_size
+                }
             }
-            
-            print(f"🔍 Entity payload: {json.dumps(entity_payload, indent=2)}")
-            response = self._request("POST", "/v1/networks/reporting/entity", entity_payload)
-            return response
         except Exception as e:
             # Extract detailed error information
             error_msg = str(e)

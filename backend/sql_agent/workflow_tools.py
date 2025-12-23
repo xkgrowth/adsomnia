@@ -836,13 +836,12 @@ def wf3_fetch_conversions(
         })
     
     # Default columns for conversion reports
-    # Note: Entity reporting endpoint may not support all conversion-specific columns
-    # We'll use the columns that are available in entity reporting
+    # These columns are available in the conversions/export endpoint
     default_columns = [
-        "offer", "affiliate", "sub1", "payout", "revenue"
+        "conversion_id", "click_id", "status", "date", "click_date",
+        "sub1", "affiliate", "offer", "payout", "revenue",
+        "conversion_ip", "transaction_id", "is_fraud", "fraud_reason"
     ]
-    # For detailed conversion data, we might need to use the export endpoint
-    # But for now, let's try entity reporting with available columns
     
     try:
         from .everflow_client import EverflowClient
