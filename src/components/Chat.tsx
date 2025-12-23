@@ -14,6 +14,7 @@ type Message = {
     reportType?: string;
     dateRange?: string;
     filters?: Record<string, any>;
+    originalQuery?: string; // Store original user query for fetching full reports
   };
 };
 
@@ -139,6 +140,7 @@ export default function Chat() {
   const [entitiesLoading, setEntitiesLoading] = useState(true);
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [currentReportData, setCurrentReportData] = useState<ReportData | null>(null);
+  const [isLoadingFullReport, setIsLoadingFullReport] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -278,7 +280,40 @@ export default function Chat() {
            /report|table|data|export/i.test(content);
   };
 
-  const handleViewReport = (message: Message) => {
+  const handleViewReport = async (message: Message) => {
+    // If we have report metadata with original query, fetch ALL records from the API
+    if (message.reportMetadata && 
+        message.reportMetadata.reportType === 'landing_pages' &&
+        message.reportMetadata.originalQuery) {
+      try {
+        setIsLoadingFullReport(true);
+        
+        // Make a new API call to get ALL landing pages (no top_n limit)
+        // Modify the query to explicitly request all results
+        const fullQuery = `${message.reportMetadata.originalQuery} - show all landing pages, no limit`;
+        const fullReportResponse = await sendChatMessage(
+          fullQuery,
+          threadId || undefined
+        );
+        
+        // Parse the full report data
+        const fullReportData = parseReportData(fullReportResponse.response);
+        if (fullReportData && fullReportData.rows.length > 0) {
+          // Use the full report data with all records
+          setCurrentReportData(fullReportData);
+          setReportModalOpen(true);
+          setIsLoadingFullReport(false);
+          return;
+        }
+      } catch (error) {
+        console.error('Error fetching full report:', error);
+        // Fall back to using the existing report data
+      } finally {
+        setIsLoadingFullReport(false);
+      }
+    }
+    
+    // Fallback: use the existing report data
     if (message.reportData) {
       setCurrentReportData(message.reportData);
       setReportModalOpen(true);
@@ -365,6 +400,7 @@ export default function Chat() {
         reportType = 'landing_pages';
       }
 
+      // Store the original user query for fetching full reports
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
@@ -374,6 +410,7 @@ export default function Chat() {
         reportMetadata: hasReport ? {
           reportType: reportType,
           dateRange: dateRange,
+          originalQuery: messageContent.trim(), // Store original query for full report fetch
         } : undefined,
       };
       
@@ -416,8 +453,163 @@ export default function Chat() {
   };
 
   const formatContent = (content: string) => {
+    // First, check if content contains a markdown table
+    const tableRegex = /\|(.+)\|\s*\n\s*\|[-\s|:]+\|\s*\n((?:\|.+\|\s*\n?)+)/g;
+    const tableMatches = Array.from(content.matchAll(tableRegex));
+    
+    if (tableMatches.length > 0) {
+      // Split content by tables and process each part
+      const parts: (string | JSX.Element)[] = [];
+      let lastIndex = 0;
+      
+      tableMatches.forEach((match, matchIndex) => {
+        // Add text before table
+        if (match.index !== undefined && match.index > lastIndex) {
+          const textBefore = content.substring(lastIndex, match.index);
+          parts.push(...formatTextContent(textBefore));
+        }
+        
+        // Parse and render table
+        const headerRow = match[1];
+        const dataRows = match[2].trim().split('\n').filter(row => row.trim().startsWith('|'));
+        
+        const columns = headerRow
+          .split('|')
+          .map((col) => col.trim())
+          .filter((col) => col.length > 0);
+        
+        // Determine default sort column based on table type
+        const getDefaultSortColumn = (cols: string[]): { column: string; direction: 'asc' | 'desc' } | null => {
+          // For landing pages, sort by Conversion Rate (desc) or Conversions (desc)
+          const lowerCols = cols.map(c => c.toLowerCase());
+          if (lowerCols.includes('conversion rate')) {
+            return { column: 'conversion rate', direction: 'desc' };
+          }
+          if (lowerCols.includes('conversions')) {
+            return { column: 'conversions', direction: 'desc' };
+          }
+          if (lowerCols.includes('revenue')) {
+            return { column: 'revenue', direction: 'desc' };
+          }
+          if (lowerCols.includes('clicks')) {
+            return { column: 'clicks', direction: 'desc' };
+          }
+          return null;
+        };
+        
+        const defaultSort = getDefaultSortColumn(columns);
+        
+        // Parse and sort rows
+        const parsedRows = dataRows.map((row) => {
+          const cells = row
+            .split('|')
+            .map((cell) => cell.trim())
+            .filter((cell) => cell.length > 0);
+          return cells;
+        });
+        
+        // Sort rows if default sort column is found
+        let sortedRows = parsedRows;
+        if (defaultSort) {
+          const sortColIndex = columns.findIndex(
+            col => col.toLowerCase() === defaultSort.column
+          );
+          
+          if (sortColIndex >= 0) {
+            sortedRows = [...parsedRows].sort((a, b) => {
+              const aVal = a[sortColIndex] || '';
+              const bVal = b[sortColIndex] || '';
+              
+              // Parse numbers from strings (handles "4,255", "12.76%", etc.)
+              const parseNumber = (val: string): number | null => {
+                const cleaned = val.replace(/[,\s%$]/g, "");
+                const parsed = parseFloat(cleaned);
+                return isNaN(parsed) ? null : parsed;
+              };
+              
+              const aNum = parseNumber(aVal);
+              const bNum = parseNumber(bVal);
+              
+              // If both are numbers, sort numerically
+              if (aNum !== null && bNum !== null) {
+                return defaultSort.direction === "asc"
+                  ? aNum - bNum
+                  : bNum - aNum;
+              }
+              
+              // Fallback to string comparison
+              const aStr = aVal.toLowerCase();
+              const bStr = bVal.toLowerCase();
+              return defaultSort.direction === "asc"
+                ? aStr.localeCompare(bStr)
+                : bStr.localeCompare(aStr);
+            });
+          }
+        }
+        
+        parts.push(
+          <div key={`table-${matchIndex}`} className="my-4 overflow-x-auto">
+            <table className="w-full border-collapse border border-border rounded-lg overflow-hidden">
+              <thead>
+                <tr className="bg-bg-tertiary border-b border-border">
+                  {columns.map((col, colIndex) => (
+                    <th
+                      key={colIndex}
+                      className="px-4 py-2 text-left text-xs font-semibold text-accent-yellow uppercase tracking-wide border-r border-border last:border-r-0"
+                    >
+                      {col.trim()}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sortedRows.map((cells, rowIndex) => {
+                  return (
+                    <tr
+                      key={rowIndex}
+                      className="border-b border-border hover:bg-bg-secondary transition-colors last:border-b-0"
+                    >
+                      {columns.map((_, colIndex) => {
+                        const cellContent = cells[colIndex] || '';
+                        // Check if it's a number (for right alignment)
+                        const isNumber = /^[\d,.\-%$]+$/.test(cellContent.trim());
+                        return (
+                          <td
+                            key={colIndex}
+                            className={`px-4 py-2 text-sm text-text-primary border-r border-border last:border-r-0 ${
+                              isNumber ? 'text-right font-mono' : 'text-left'
+                            }`}
+                          >
+                            {cellContent}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+        
+        lastIndex = (match.index || 0) + match[0].length;
+      });
+      
+      // Add remaining text after last table
+      if (lastIndex < content.length) {
+        parts.push(...formatTextContent(content.substring(lastIndex)));
+      }
+      
+      return parts.length > 0 ? parts : [content];
+    }
+    
+    // No tables found, format as regular text
+    return formatTextContent(content);
+  };
+
+  const formatTextContent = (text: string) => {
     // Split by markdown patterns and format
-    const parts = content.split(/(\*\*.*?\*\*|`.*?`|\n)/);
+    const parts = text.split(/(\*\*.*?\*\*|`.*?`|\n)/);
     return parts.map((part, i) => {
       if (part.startsWith("**") && part.endsWith("**")) {
         return (
@@ -515,14 +707,22 @@ export default function Chat() {
                   <div className="text-sm leading-relaxed text-text-primary whitespace-pre-wrap">
                     {formatContent(message.content)}
                   </div>
-                  {/* View Report Button */}
+                  {/* View Full Report Button */}
                   {message.reportData && (
                     <div className="mt-3">
                       <button
                         onClick={() => handleViewReport(message)}
-                        className="btn-primary px-4 py-2 text-xs"
+                        disabled={isLoadingFullReport}
+                        className="btn-primary px-4 py-2 text-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                       >
-                        View Report
+                        {isLoadingFullReport ? (
+                          <>
+                            <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                            Loading...
+                          </>
+                        ) : (
+                          'View Full Report'
+                        )}
                       </button>
                     </div>
                   )}

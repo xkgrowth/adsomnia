@@ -256,6 +256,10 @@ You MUST:
 
 DO NOT use the default days=30 when the user specifies "year to date"!
 
+**Important: When user requests "show all results" or "no limit" or "all landing pages":**
+- Set top_n to a very high number (e.g., 1000) or omit the limit entirely
+- The tool will return ALL matching landing pages, not just the top 10
+
 To start, analyze the user's query, determine the intent, extract required entities, and call the appropriate workflow tool. Always maintain conversation context and don't restart unless the user explicitly starts a new topic.
 """
     

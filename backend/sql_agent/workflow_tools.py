@@ -357,8 +357,13 @@ def wf2_identify_top_lps(
         # Sort by conversion rate (descending)
         processed_lps.sort(key=lambda x: x["conversion_rate"], reverse=True)
         
-        # Return top N
-        top_lps = processed_lps[:top_n]
+        # Return top N (or all if top_n is very large, meaning "show all")
+        if top_n >= 1000:
+            # User requested "all results" - return everything
+            top_lps = processed_lps
+        else:
+            # Return top N
+            top_lps = processed_lps[:top_n]
         
         if not top_lps:
             return json.dumps({

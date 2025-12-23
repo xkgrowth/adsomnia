@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { X, Download, ChevronDown, ChevronRight } from "lucide-react";
 
 export interface ReportRow {
@@ -79,17 +79,36 @@ export default function ReportModal({
     if (!sortConfig) return data.rows;
 
     const sorted = [...data.rows].sort((a, b) => {
-      const aVal = a[sortConfig.column];
-      const bVal = b[sortConfig.column];
+      let aVal = a[sortConfig.column];
+      let bVal = b[sortConfig.column];
 
-      // Handle numbers
-      if (typeof aVal === "number" && typeof bVal === "number") {
+      // Parse numbers from strings (handles "4,255", "12.76%", etc.)
+      const parseNumber = (val: any): number | null => {
+        if (typeof val === "number") return val;
+        if (typeof val === "string") {
+          // Remove commas, percentage signs, and other formatting
+          const cleaned = val.replace(/[,\s%$]/g, "");
+          const parsed = parseFloat(cleaned);
+          return isNaN(parsed) ? null : parsed;
+        }
+        return null;
+      };
+
+      const aNum = parseNumber(aVal);
+      const bNum = parseNumber(bVal);
+
+      // If both are numbers, sort numerically
+      if (aNum !== null && bNum !== null) {
         return sortConfig.direction === "asc"
-          ? aVal - bVal
-          : bVal - aVal;
+          ? aNum - bNum
+          : bNum - aNum;
       }
 
-      // Handle strings
+      // If one is a number and one isn't, numbers come first
+      if (aNum !== null && bNum === null) return -1;
+      if (aNum === null && bNum !== null) return 1;
+
+      // Both are strings, sort alphabetically
       const aStr = String(aVal || "").toLowerCase();
       const bStr = String(bVal || "").toLowerCase();
 
@@ -102,6 +121,29 @@ export default function ReportModal({
 
     return sorted;
   }, [data.rows, sortConfig]);
+
+  const selectAllCheckboxRef = useRef<HTMLInputElement>(null);
+  
+  // Calculate select all state after sortedRows is defined
+  const allSelected = sortedRows.length > 0 && selectedRows.size === sortedRows.length;
+  const someSelected = selectedRows.size > 0 && selectedRows.size < sortedRows.length;
+
+  // Set indeterminate state for select all checkbox
+  useEffect(() => {
+    if (selectAllCheckboxRef.current) {
+      selectAllCheckboxRef.current.indeterminate = someSelected;
+    }
+  }, [someSelected]);
+
+  const toggleSelectAll = () => {
+    if (selectedRows.size === sortedRows.length) {
+      // Deselect all
+      setSelectedRows(new Set());
+    } else {
+      // Select all
+      setSelectedRows(new Set(sortedRows.map(row => row.id)));
+    }
+  };
 
   const renderRow = (row: ReportRow, level: number = 0): JSX.Element => {
     const hasChildren = row.children && row.children.length > 0;
@@ -137,7 +179,7 @@ export default function ReportModal({
             type="checkbox"
             checked={isSelected}
             onChange={() => toggleRowSelection(row.id)}
-            className="w-4 h-4 border-border rounded bg-bg-tertiary"
+            className="w-4 h-4 border-2 border-accent-yellow rounded bg-bg-primary cursor-pointer checked:bg-accent-yellow checked:border-accent-yellow focus:ring-2 focus:ring-accent-yellow focus:ring-offset-2 focus:ring-offset-bg-primary transition-colors"
           />
 
           {/* Row Data */}
@@ -170,8 +212,14 @@ export default function ReportModal({
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-bg-primary border border-border rounded-lg w-[90vw] h-[85vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop with transparency */}
+      <div 
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      {/* Modal */}
+      <div className="relative bg-bg-primary border border-border rounded-lg w-[90vw] h-[85vh] flex flex-col shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
           <div>
@@ -213,7 +261,14 @@ export default function ReportModal({
             <div className="sticky top-0 bg-bg-tertiary border-b border-border z-10">
               <div className="flex items-center gap-2 py-2 px-3">
                 <div className="w-6" /> {/* Spacer for expand button */}
-                <div className="w-4" /> {/* Spacer for checkbox */}
+                {/* Select All Checkbox */}
+                <input
+                  ref={selectAllCheckboxRef}
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4 border-2 border-accent-yellow rounded bg-bg-primary cursor-pointer checked:bg-accent-yellow checked:border-accent-yellow focus:ring-2 focus:ring-accent-yellow focus:ring-offset-2 focus:ring-offset-bg-primary transition-colors"
+                />
                 {data.columns.map((column) => (
                   <button
                     key={column}
@@ -328,7 +383,7 @@ function ExportFieldSelector({
                   type="checkbox"
                   checked={selectedColumns.has(column)}
                   onChange={() => toggleColumn(column)}
-                  className="w-4 h-4 border-border rounded bg-bg-tertiary"
+                  className="w-4 h-4 border-2 border-accent-yellow rounded bg-bg-primary cursor-pointer checked:bg-accent-yellow checked:border-accent-yellow focus:ring-2 focus:ring-accent-yellow focus:ring-offset-2 focus:ring-offset-bg-primary transition-colors"
                 />
                 <span className="text-sm text-text-primary">{column}</span>
               </label>
