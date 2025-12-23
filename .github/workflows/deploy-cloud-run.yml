@@ -1,0 +1,78 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # Allows manual deployment from GitHub UI
+
+env:
+  PROJECT_ID: p-power-up-ai
+  REGION: us-central1
+  SERVICE_NAME: adsomnia-backend
+  GAR_LOCATION: us-central1
+  REPOSITORY: adsomnia
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      id-token: write  # Required for Workload Identity Federation
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: github-actions-adsomnia@p-power-up-ai.iam.gserviceaccount.com
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.GAR_LOCATION }}-docker.pkg.dev
+
+      - name: Build Docker image
+        run: |
+          docker build -t ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+                       -t ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}:latest \
+                       .
+
+      - name: Push Docker image to Artifact Registry
+        run: |
+          docker push ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+          docker push ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}:latest
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }} \
+            --platform managed \
+            --region ${{ env.REGION }} \
+            --allow-unauthenticated \
+            --port 8080 \
+            --memory 512Mi \
+            --cpu 1 \
+            --timeout 300 \
+            --max-instances 10 \
+            --set-env-vars "EVERFLOW_BASE_URL=https://api.eflow.team,EVERFLOW_TIMEZONE_ID=67" \
+            --update-secrets API_KEY=API_KEY:latest,EVERFLOW_API_KEY=EVERFLOW_API_KEY:latest,GEMINI_KEY=GEMINI_KEY:latest \
+            --project ${{ env.PROJECT_ID }}
+
+      - name: Get Service URL
+        run: |
+          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --platform managed \
+            --region ${{ env.REGION }} \
+            --project ${{ env.PROJECT_ID }} \
+            --format 'value(status.url)')
+          echo "🌐 Service deployed to: $SERVICE_URL"
+          echo "📚 API Docs: $SERVICE_URL/docs"
+          echo "❤️  Health: $SERVICE_URL/health"
+
