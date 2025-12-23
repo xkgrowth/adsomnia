@@ -421,71 +421,53 @@ class EverflowClient:
         """
         Fetch conversion data for viewing (not exporting).
         
-        Uses the conversions/export endpoint to get a CSV download URL,
-        then downloads and parses the CSV to return JSON data.
+        Uses the POST /v1/networks/reporting/conversions endpoint which returns
+        JSON data with pagination support.
         
         Args:
-            columns: List of column names to include
+            columns: List of column names to include (not used by this endpoint, but kept for compatibility)
             filters: List of filter dictionaries
             from_date: Start date (YYYY-MM-DD)
             to_date: End date (YYYY-MM-DD)
-            page: Page number (default: 1) - Note: CSV export doesn't support pagination
-            page_size: Results per page (default: 50) - Note: CSV export returns all results
+            page: Page number (default: 1)
+            page_size: Results per page (default: 50)
         
         Returns:
             Dictionary with conversion data, summary, and pagination info
         """
-        import csv
-        import io
-        
-        # Use the conversions/export endpoint
+        # Use the conversions endpoint (not /export)
+        # According to Everflow API docs: POST /v1/networks/reporting/conversions
+        # Required: from, to, timezone_id, show_conversions, show_events
+        # Supports: pagination, query filters
         payload = {
-            "columns": columns,
-            "query": {"filters": filters},
             "from": from_date,
             "to": to_date,
-            "format": "csv",
-            "timezone_id": self.timezone_id
+            "timezone_id": self.timezone_id,
+            "show_conversions": True,  # Return base conversions
+            "show_events": False,  # Don't return post-conversion events for now
+            "query": {
+                "filters": filters
+            },
+            "page": page,
+            "page_size": page_size
         }
         
-        print(f"🔍 Calling Everflow API: POST /v1/networks/reporting/conversions/export")
+        print(f"🔍 Calling Everflow API: POST /v1/networks/reporting/conversions")
         print(f"🔍 Payload: {json.dumps(payload, indent=2)}")
         try:
-            # Get the CSV download URL
-            response = self._request("POST", "/v1/networks/reporting/conversions/export", payload)
-            download_url = response.get("download_url") or response.get("url")
+            response = self._request("POST", "/v1/networks/reporting/conversions", payload)
             
-            if not download_url:
-                raise Exception("No download URL returned from Everflow API")
+            # The API returns: {"conversions": [...], "paging": {...}}
+            # Map to our expected format
+            conversions = response.get("conversions", [])
+            paging = response.get("paging", {})
             
-            print(f"🔍 Download URL: {download_url}")
+            print(f"✅ API Response: {len(conversions)} conversions returned")
             
-            # Download the CSV file
-            csv_response = requests.get(download_url, timeout=30)
-            csv_response.raise_for_status()
-            
-            # Parse CSV
-            csv_content = csv_response.text
-            csv_reader = csv.DictReader(io.StringIO(csv_content))
-            conversions = list(csv_reader)
-            
-            print(f"✅ Parsed {len(conversions)} conversions from CSV")
-            
-            # Apply pagination manually (since CSV export doesn't support it)
-            start_idx = (page - 1) * page_size
-            end_idx = start_idx + page_size
-            paginated_conversions = conversions[start_idx:end_idx]
-            
-            # Return in the expected format
             return {
-                "table": paginated_conversions,
-                "conversions": paginated_conversions,  # Alias for compatibility
-                "paging": {
-                    "current_page": page,
-                    "page_size": page_size,
-                    "total_count": len(conversions),
-                    "total_pages": (len(conversions) + page_size - 1) // page_size
-                }
+                "table": conversions,  # Alias for compatibility
+                "conversions": conversions,
+                "paging": paging
             }
         except Exception as e:
             # Extract detailed error information

@@ -829,7 +829,12 @@ def wf3_fetch_conversions(
             })
     
     # Add fraud filter if report_type is "fraud"
+    # Note: According to Everflow API docs, fraud filtering might need to be done differently
+    # The API supports filters but "is_fraud" might not be a filter_type
+    # We'll try using it, but if it fails, we may need to filter client-side
     if report_type.lower() == "fraud":
+        # Try adding fraud filter - this might need adjustment based on actual API response
+        # The API might have a different way to filter fraud conversions
         api_filters.append({
             "filter_type": "is_fraud",
             "filter_value": True
