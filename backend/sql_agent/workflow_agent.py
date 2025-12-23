@@ -292,7 +292,7 @@ Your role is to understand user queries and route them to the appropriate workfl
 - Show relevant metrics (conversion rates, revenue, clicks, etc.)
 - Always provide a complete response, even if tool returns JSON - parse and format it
 - **CRITICAL: When a tool returns an error status, ALWAYS show the actual error message to the user**
-  * If tool returns {"status": "error", "message": "..."}, display that message to the user
+  * If tool returns {{"status": "error", "message": "..."}}, display that message to the user
   * Do not say "I encountered an issue" without showing what the issue is
   * Include the full error message so the user can understand what went wrong
   * Example: If tool says "Could not find offer: X", tell the user exactly that, don't just say "there was an error"
