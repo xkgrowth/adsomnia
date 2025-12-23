@@ -20,7 +20,8 @@ See `.cursor/agents/README.md` for full agent documentation.
 - `ARCHITECTURE.md` - System design, tech stack, and data flow
 - `docs/` - Workflow specifications and reference documentation
 - `docs/workflows/` - Individual workflow implementation specs
-- `docs/api/everflow_api_reference.md` - Everflow API endpoints and payloads
+- **Context7 Everflow API Docs** - ALWAYS use Context7 for current Everflow API documentation (library ID: `/websites/developers_everflow_io`)
+- `docs/api/everflow_api_reference.md` - Fallback reference only (may be outdated)
 - `docs/shared/agent_context.md` - Shared agent behavior and guidelines
 - `.cursor/agents/` - Execution agent definitions
 
@@ -45,6 +46,15 @@ See `.cursor/agents/README.md` for full agent documentation.
 - Handle rate limits gracefully
 - Log all API calls for debugging (not data)
 
+## Documentation Rules
+- **CRITICAL: Always use Context7 for Everflow API documentation**
+  - Before implementing or modifying Everflow API integrations, ALWAYS query Context7 for the latest Everflow API documentation
+  - Use `mcp_context7_resolve-library-id` with library name "everflow" to get the library ID: `/websites/developers_everflow_io`
+  - Use `mcp_context7_get-library-docs` with the library ID to fetch up-to-date API documentation
+  - Do NOT rely solely on local files like `docs/api/everflow_api_reference.md` - they may be outdated
+  - Context7 provides the most current and accurate Everflow API endpoint specifications, parameters, and examples
+  - Only use local documentation files as a fallback or for project-specific notes
+
 ## Code Style
 - Python for backend logic and data processing
 - Type hints required for all functions
@@ -59,7 +69,8 @@ See `.cursor/agents/README.md` for full agent documentation.
 
 ## When Implementing Features
 1. Always check the relevant workflow spec in `docs/workflows/`
-2. Reference `docs/api/everflow_api_reference.md` for payloads
-3. Follow patterns in `docs/shared/agent_context.md`
-4. Ensure error messages are user-friendly (natural language)
+2. **For Everflow API integrations**: ALWAYS query Context7 for latest API documentation (see Documentation Rules above)
+3. Reference `docs/api/everflow_api_reference.md` only as a fallback or for project-specific notes
+4. Follow patterns in `docs/shared/agent_context.md`
+5. Ensure error messages are user-friendly (natural language)
 
