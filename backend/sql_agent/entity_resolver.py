@@ -382,22 +382,34 @@ class EntityResolver:
                     {
                         "offer_id": offer.get("offer_id"),
                         "offer_name": offer.get("offer_name", offer.get("advertiser_name", "")),
-                        "similarity": round(sim * 100, 1)  # Convert to percentage
+                        "similarity": round(sim * 100, 1)  # Convert to percentage (e.g., 100.0 for 100%)
                     }
                     for offer, sim in suggestions
                 ]
                 
+                # Debug: Print suggestions
+                if suggestions_list:
+                    print(f"🔍 Generated {len(suggestions_list)} suggestions:")
+                    for sug in suggestions_list[:3]:
+                        print(f"   - {sug.get('offer_name')} (ID: {sug.get('offer_id')}, similarity: {sug.get('similarity')})")
+                
                 # Check if suggestions contain a good match (>= 85% similarity) that we should auto-use
                 # This catches cases where the main loop missed a match due to normalization differences
-                good_match = next((s for s in suggestions_list if s.get("similarity", 0) >= 85.0), None)
-                if good_match:
-                    offer_id = good_match.get("offer_id")
-                    similarity = good_match.get("similarity", 0)
-                    print(f"✅ Good match found in suggestions: Offer ID {offer_id} = '{good_match.get('offer_name')}' ({similarity}% match)")
-                    self._offer_cache[search_name] = offer_id
-                    if return_suggestions:
-                        return offer_id, []
-                    return offer_id
+                for sug in suggestions_list:
+                    similarity = sug.get("similarity", 0)
+                    # Ensure similarity is a number
+                    if isinstance(similarity, (int, float)):
+                        similarity_float = float(similarity)
+                    else:
+                        similarity_float = 0.0
+                    
+                    if similarity_float >= 85.0:
+                        offer_id = sug.get("offer_id")
+                        print(f"✅ Good match found in suggestions: Offer ID {offer_id} = '{sug.get('offer_name')}' ({similarity_float}% match)")
+                        self._offer_cache[search_name] = offer_id
+                        if return_suggestions:
+                            return offer_id, []
+                        return offer_id
                 
                 if return_suggestions:
                     return None, suggestions_list

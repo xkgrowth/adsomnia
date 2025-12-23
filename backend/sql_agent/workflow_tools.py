@@ -190,14 +190,28 @@ def wf2_identify_top_lps(
     # Resolve offer name to ID with suggestions
     resolved_offer_id, suggestions = resolver.resolve_offer(offer_id, return_suggestions=True)
     
+    # Debug logging
+    print(f"🔍 Resolver returned: offer_id={resolved_offer_id}, suggestions_count={len(suggestions) if suggestions else 0}")
+    if suggestions:
+        for i, sug in enumerate(suggestions[:3]):
+            print(f"   Suggestion {i+1}: {sug.get('offer_name')} (ID: {sug.get('offer_id')}, similarity: {sug.get('similarity')})")
+    
     # Auto-use good matches (similarity >= 85%) from suggestions if resolver didn't find one
     if resolved_offer_id is None and suggestions:
         # Check if there's a good match (>= 85% similarity)
-        good_match = next((s for s in suggestions if s.get("similarity", 0) >= 85.0), None)
-        if good_match:
-            resolved_offer_id = good_match.get("offer_id")
-            similarity = good_match.get("similarity", 0)
-            print(f"✅ Auto-using good match: {good_match.get('offer_name')} (ID: {resolved_offer_id}, {similarity}% match)")
+        # Handle both float (85.0) and int (85) similarity values
+        for sug in suggestions:
+            similarity = sug.get("similarity", 0)
+            # Convert to float if needed
+            if isinstance(similarity, (int, float)):
+                similarity_float = float(similarity)
+            else:
+                similarity_float = 0.0
+            
+            if similarity_float >= 85.0:
+                resolved_offer_id = sug.get("offer_id")
+                print(f"✅ Auto-using good match: {sug.get('offer_name')} (ID: {resolved_offer_id}, {similarity_float}% match)")
+                break
     
     if resolved_offer_id is None:
         # Build error message with suggestions
