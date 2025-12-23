@@ -291,6 +291,9 @@ class EverflowAPIValidator:
             similar = self._find_similar_endpoints(endpoint)
             if similar:
                 suggestions.append(f"Did you mean: {', '.join(similar[:3])}?")
+            
+            # Debug: Log what endpoints we know about
+            logger.debug(f"Known endpoints: {list(self.endpoint_specs.keys())}")
         else:
             spec = self.endpoint_specs[endpoint]
             

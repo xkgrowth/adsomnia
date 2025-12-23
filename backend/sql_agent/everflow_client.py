@@ -93,13 +93,20 @@ class EverflowClient:
         
         # For GET requests to known entity endpoints, be lenient (warn but don't block)
         is_entity_endpoint = any(ep in endpoint for ep in ["/v1/networks/affiliates", "/v1/networks/offers"])
+        # For POST requests to known reporting endpoints, also be lenient
+        is_reporting_endpoint = any(ep in endpoint for ep in [
+            "/v1/networks/reporting/entity",
+            "/v1/networks/reporting/entity/table/export",
+            "/v1/networks/reporting/conversions",
+            "/v1/networks/reporting/conversions/export"
+        ])
         
         if not validation.valid:
-            if method.upper() == "GET" and is_entity_endpoint:
-                # For GET requests to entity endpoints, just warn but proceed
+            if (method.upper() == "GET" and is_entity_endpoint) or (method.upper() == "POST" and is_reporting_endpoint):
+                # For known endpoints, just warn but proceed
                 logger.warning(f"Endpoint validation warning (proceeding anyway): {validation.errors}")
             else:
-                # For other requests, block if validation fails
+                # For unknown endpoints, block if validation fails
                 error_msg = "API Request Validation Failed:\n"
                 error_msg += "\n".join(f"  - {e}" for e in validation.errors)
                 if validation.suggestions:
