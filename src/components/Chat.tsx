@@ -274,7 +274,12 @@ export default function Chat() {
   };
 
   const submitMessage = async (messageContent: string) => {
-    if (!messageContent.trim() || isLoading) return;
+    if (!messageContent.trim() || isLoading) {
+      console.log('submitMessage: Skipping - empty message or already loading', { messageContent, isLoading });
+      return;
+    }
+
+    console.log('submitMessage: Starting', { messageContent, threadId });
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -289,8 +294,10 @@ export default function Chat() {
     setError(null);
 
     try {
+      console.log('submitMessage: Calling API', { message: userMessage.content, threadId });
       // Call the API
       const response = await sendChatMessage(userMessage.content, threadId || undefined);
+      console.log('submitMessage: API response received', { response });
       
       // Update thread ID if provided
       if (response.thread_id) {
@@ -315,6 +322,7 @@ export default function Chat() {
       
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (err) {
+      console.error('submitMessage: Error occurred', err);
       const errorMessage = err instanceof Error ? err.message : "Failed to get response";
       setError(errorMessage);
       
@@ -328,6 +336,7 @@ export default function Chat() {
       setMessages((prev) => [...prev, errorResponse]);
     } finally {
       setIsLoading(false);
+      console.log('submitMessage: Finished');
     }
   };
 
@@ -344,6 +353,7 @@ export default function Chat() {
   };
 
   const handleExampleClick = (query: string) => {
+    console.log('handleExampleClick: Called with query', query);
     // Automatically submit the example query
     submitMessage(query);
   };
