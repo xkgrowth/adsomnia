@@ -282,3 +282,208 @@ export async function exportReportCSV(
   }
 }
 
+// ============================================================================
+// WF3.1 - Conversion Reports (Viewing)
+// ============================================================================
+
+export interface FetchConversionsRequest {
+  report_type: "fraud" | "conversions";
+  date_range: string;
+  filters?: Record<string, any>;
+  page?: number;
+  page_size?: number;
+}
+
+export interface ConversionSummary {
+  total: number;
+  approved: number;
+  invalid: number;
+  pending: number;
+  rejected_manual: number;
+  rejected_throttle: number;
+  payout: number;
+  revenue: number;
+  gross_sales: number;
+}
+
+export interface ConversionRecord {
+  conversion_id?: string;
+  click_id?: string;
+  status?: string;
+  date?: string;
+  click_date?: string;
+  sub1?: string;
+  offer?: string;
+  partner?: string;
+  delta?: string;
+  payout?: number | string;
+  revenue?: number | string;
+  conversion_ip?: string;
+  transaction_id?: string;
+  offer_events?: string;
+  adv1?: string;
+  adv2?: string;
+  event_name?: string;
+  is_fraud?: boolean;
+  fraud_reason?: string;
+  [key: string]: any;
+}
+
+export interface FetchConversionsResponse {
+  status: string;
+  report_type: string;
+  date_range: string;
+  summary: ConversionSummary;
+  conversions: ConversionRecord[];
+  pagination: {
+    page: number;
+    page_size: number;
+    total_count: number;
+    total_pages: number;
+  };
+  filters?: Record<string, any>;
+  message?: string;
+}
+
+export async function fetchConversions(
+  request: FetchConversionsRequest
+): Promise<FetchConversionsResponse> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/workflows/wf3/fetch-conversions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': API_KEY,
+      },
+      body: JSON.stringify({
+        report_type: request.report_type,
+        date_range: request.date_range,
+        filters: request.filters,
+        page: request.page || 1,
+        page_size: request.page_size || 50,
+      }),
+    });
+
+    if (!response.ok) {
+      let errorMessage = `HTTP ${response.status}`;
+      try {
+        const error = await response.json();
+        errorMessage = error.detail || error.message || error.error || JSON.stringify(error);
+      } catch (e) {
+        try {
+          const errorText = await response.text();
+          errorMessage = errorText || errorMessage;
+        } catch (e2) {
+          // Keep default error message
+        }
+      }
+      throw new Error(errorMessage);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Failed to fetch conversions');
+  }
+}
+
+export interface UpdateConversionStatusRequest {
+  conversion_id: string;
+  status: "approved" | "rejected" | "invalid";
+}
+
+export interface UpdateConversionStatusResponse {
+  status: string;
+  message: string;
+  conversion_id?: string;
+  updated_count?: number;
+}
+
+export async function updateConversionStatus(
+  request: UpdateConversionStatusRequest
+): Promise<UpdateConversionStatusResponse> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/workflows/wf3/conversions/${request.conversion_id}/status`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': API_KEY,
+      },
+      body: JSON.stringify({
+        status: request.status,
+      }),
+    });
+
+    if (!response.ok) {
+      let errorMessage = `HTTP ${response.status}`;
+      try {
+        const error = await response.json();
+        errorMessage = error.detail || error.message || error.error || JSON.stringify(error);
+      } catch (e) {
+        try {
+          const errorText = await response.text();
+          errorMessage = errorText || errorMessage;
+        } catch (e2) {
+          // Keep default error message
+        }
+      }
+      throw new Error(errorMessage);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Failed to update conversion status');
+  }
+}
+
+export interface BulkUpdateConversionStatusRequest {
+  conversion_ids: string[];
+  status: "approved" | "rejected" | "invalid";
+}
+
+export async function bulkUpdateConversionStatus(
+  request: BulkUpdateConversionStatusRequest
+): Promise<UpdateConversionStatusResponse> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/workflows/wf3/conversions/bulk-status`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': API_KEY,
+      },
+      body: JSON.stringify({
+        conversion_ids: request.conversion_ids,
+        status: request.status,
+      }),
+    });
+
+    if (!response.ok) {
+      let errorMessage = `HTTP ${response.status}`;
+      try {
+        const error = await response.json();
+        errorMessage = error.detail || error.message || error.error || JSON.stringify(error);
+      } catch (e) {
+        try {
+          const errorText = await response.text();
+          errorMessage = errorText || errorMessage;
+        } catch (e2) {
+          // Keep default error message
+        }
+      }
+      throw new Error(errorMessage);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Failed to bulk update conversion statuses');
+  }
+}
+

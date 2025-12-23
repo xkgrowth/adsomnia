@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect, useImperativeHandle, forwardRef } from "react";
-import { sendChatMessage, fetchEntities, exportReportCSV, type Affiliate, type Offer, type ReportData, type ExportRequest } from "@/lib/api";
+import { sendChatMessage, fetchEntities, exportReportCSV, type Affiliate, type Offer, type ReportData, type ExportRequest, fetchConversions, updateConversionStatus, bulkUpdateConversionStatus, type FetchConversionsResponse, type ConversionReportData } from "@/lib/api";
 import ReportModal, { type ReportRow } from "./ReportModal";
+import ConversionReportModal, { type ConversionRecord } from "./ConversionReportModal";
 
 type Message = {
   id: string;
@@ -10,6 +11,7 @@ type Message = {
   content: string;
   timestamp: Date;
   reportData?: ReportData; // Optional report data for this message
+  conversionReportData?: ConversionReportData; // Optional conversion report data
   reportMetadata?: {
     reportType?: string;
     dateRange?: string;
@@ -217,6 +219,8 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [currentReportData, setCurrentReportData] = useState<ReportData | null>(null);
   const [isLoadingFullReport, setIsLoadingFullReport] = useState(false);
+  const [conversionReportModalOpen, setConversionReportModalOpen] = useState(false);
+  const [currentConversionReportData, setCurrentConversionReportData] = useState<ConversionReportData | null>(null);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -456,6 +460,103 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
     }
   };
 
+  const handleViewConversionReport = async (message: Message) => {
+    // If we have conversion report data, show it
+    if (message.conversionReportData) {
+      setCurrentConversionReportData(message.conversionReportData);
+      setConversionReportModalOpen(true);
+      return;
+    }
+
+    // If we have metadata, try to fetch conversion data
+    if (message.reportMetadata && 
+        (message.reportMetadata.reportType === 'fraud' || message.reportMetadata.reportType === 'conversions') &&
+        message.reportMetadata.originalQuery) {
+      try {
+        setIsLoadingFullReport(true);
+        
+        // Fetch conversion data using the API
+        const conversionData = await fetchConversions({
+          report_type: message.reportMetadata.reportType as "fraud" | "conversions",
+          date_range: message.reportMetadata.dateRange || "last 30 days",
+          filters: message.reportMetadata.filters,
+          page: 1,
+          page_size: 50
+        });
+        
+        setCurrentConversionReportData(conversionData);
+        setConversionReportModalOpen(true);
+      } catch (error) {
+        console.error('Error fetching conversion report:', error);
+        alert('Failed to load conversion report. Please try again.');
+      } finally {
+        setIsLoadingFullReport(false);
+      }
+    }
+  };
+
+  const handleApproveConversions = async (conversionIds: string[]) => {
+    try {
+      if (conversionIds.length === 1) {
+        await updateConversionStatus({
+          conversion_id: conversionIds[0],
+          status: "approved"
+        });
+      } else {
+        await bulkUpdateConversionStatus({
+          conversion_ids: conversionIds,
+          status: "approved"
+        });
+      }
+      
+      // Refresh the conversion report data
+      if (currentConversionReportData) {
+        const refreshed = await fetchConversions({
+          report_type: currentConversionReportData.report_type as "fraud" | "conversions",
+          date_range: currentConversionReportData.date_range,
+          filters: currentConversionReportData.filters,
+          page: currentConversionReportData.pagination.page,
+          page_size: currentConversionReportData.pagination.page_size
+        });
+        setCurrentConversionReportData(refreshed);
+      }
+    } catch (error) {
+      console.error('Error approving conversions:', error);
+      throw error;
+    }
+  };
+
+  const handleRejectConversions = async (conversionIds: string[]) => {
+    try {
+      if (conversionIds.length === 1) {
+        await updateConversionStatus({
+          conversion_id: conversionIds[0],
+          status: "rejected"
+        });
+      } else {
+        await bulkUpdateConversionStatus({
+          conversion_ids: conversionIds,
+          status: "rejected"
+        });
+      }
+      
+      // Refresh the conversion report data
+      if (currentConversionReportData) {
+        const refreshed = await fetchConversions({
+          report_type: currentConversionReportData.report_type as "fraud" | "conversions",
+          date_range: currentConversionReportData.date_range,
+          filters: currentConversionReportData.filters,
+          page: currentConversionReportData.pagination.page,
+          page_size: currentConversionReportData.pagination.page_size
+        });
+        setCurrentConversionReportData(refreshed);
+      }
+    } catch (error) {
+      console.error('Error rejecting conversions:', error);
+      throw error;
+    }
+  };
+
   const handleExportReport = async (
     selectedRows: ReportRow[],
     selectedColumns: string[]
@@ -555,6 +656,21 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
       const reportData = parseReportData(response.response, { reportType, dateRange });
       const hasReport = hasReportData(response.response);
 
+      // Check if response contains conversion report data (JSON format)
+      let conversionReportData: ConversionReportData | undefined = undefined;
+      try {
+        // Try to parse JSON from the response
+        const jsonMatch = response.response.match(/\{[\s\S]*"conversions"[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed.conversions && parsed.summary) {
+            conversionReportData = parsed as ConversionReportData;
+          }
+        }
+      } catch (e) {
+        // Not a conversion report, continue
+      }
+
       // Store the original user query for fetching full reports
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -562,10 +678,12 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
         content: response.response,
         timestamp: new Date(),
         reportData: reportData || undefined,
-        reportMetadata: hasReport ? {
+        conversionReportData: conversionReportData,
+        reportMetadata: hasReport || conversionReportData ? {
           reportType: reportType,
           dateRange: dateRange,
           originalQuery: messageContent.trim(), // Store original query for full report fetch
+          filters: conversionReportData?.filters,
         } : undefined,
       };
       
@@ -881,6 +999,45 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
                       </button>
                     </div>
                   )}
+                  {/* View Conversion Report Button */}
+                  {message.conversionReportData && (
+                    <div className="mt-3">
+                      <button
+                        onClick={() => handleViewConversionReport(message)}
+                        disabled={isLoadingFullReport}
+                        className="btn-primary px-4 py-2 text-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {isLoadingFullReport ? (
+                          <>
+                            <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                            Loading...
+                          </>
+                        ) : (
+                          'View Conversion Report'
+                        )}
+                      </button>
+                    </div>
+                  )}
+                  {/* View Conversion Report Button (from metadata) */}
+                  {!message.conversionReportData && message.reportMetadata && 
+                   (message.reportMetadata.reportType === 'fraud' || message.reportMetadata.reportType === 'conversions') && (
+                    <div className="mt-3">
+                      <button
+                        onClick={() => handleViewConversionReport(message)}
+                        disabled={isLoadingFullReport}
+                        className="btn-primary px-4 py-2 text-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {isLoadingFullReport ? (
+                          <>
+                            <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                            Loading...
+                          </>
+                        ) : (
+                          'View Conversion Report'
+                        )}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
@@ -971,6 +1128,24 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
           }}
           data={currentReportData}
           onExport={handleExportReport}
+        />
+      )}
+
+      {/* Conversion Report Modal */}
+      {currentConversionReportData && (
+        <ConversionReportModal
+          isOpen={conversionReportModalOpen}
+          onClose={() => {
+            setConversionReportModalOpen(false);
+            setCurrentConversionReportData(null);
+          }}
+          data={currentConversionReportData}
+          onApprove={handleApproveConversions}
+          onReject={handleRejectConversions}
+          onExport={() => {
+            // Export functionality can be added here
+            alert('Export functionality coming soon');
+          }}
         />
       )}
     </div>

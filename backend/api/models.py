@@ -77,6 +77,100 @@ class ExportReportResponse(BaseModel):
 
 
 # ============================================================================
+# WF3.1 - Fetch Conversions (Viewing)
+# ============================================================================
+
+class FetchConversionsRequest(BaseModel):
+    """Request model for fetching conversion data."""
+    report_type: Literal["fraud", "conversions"] = Field(
+        ..., description="Type of conversion report"
+    )
+    date_range: str = Field(..., description="Natural language date range")
+    filters: Optional[Dict[str, Any]] = Field(None, description="Filters (offer_id, affiliate_id, source_id, etc.)")
+    page: int = Field(1, ge=1, description="Page number")
+    page_size: int = Field(50, ge=1, le=100, description="Results per page")
+
+
+class ConversionSummary(BaseModel):
+    """Summary statistics for conversions."""
+    total: int
+    approved: int
+    invalid: int
+    pending: int
+    rejected_manual: int
+    rejected_throttle: int
+    payout: float
+    revenue: float
+    gross_sales: float
+
+
+class ConversionRecord(BaseModel):
+    """Single conversion record."""
+    conversion_id: Optional[str] = None
+    click_id: Optional[str] = None
+    status: Optional[str] = None
+    date: Optional[str] = None
+    click_date: Optional[str] = None
+    sub1: Optional[str] = None
+    offer: Optional[str] = None
+    partner: Optional[str] = None
+    delta: Optional[str] = None
+    payout: Optional[float] = None
+    revenue: Optional[float] = None
+    conversion_ip: Optional[str] = None
+    transaction_id: Optional[str] = None
+    offer_events: Optional[str] = None
+    adv1: Optional[str] = None
+    adv2: Optional[str] = None
+    event_name: Optional[str] = None
+    is_fraud: Optional[bool] = None
+    fraud_reason: Optional[str] = None
+    # Allow additional fields
+    class Config:
+        extra = "allow"
+
+
+class PaginationInfo(BaseModel):
+    """Pagination information."""
+    page: int
+    page_size: int
+    total_count: int
+    total_pages: int
+
+
+class FetchConversionsResponse(BaseModel):
+    """Response model for fetching conversions."""
+    status: str
+    report_type: str
+    date_range: str
+    summary: ConversionSummary
+    conversions: List[ConversionRecord]
+    pagination: PaginationInfo
+    filters: Optional[Dict[str, Any]] = None
+    message: Optional[str] = None
+
+
+class UpdateConversionStatusRequest(BaseModel):
+    """Request model for updating conversion status."""
+    conversion_id: str = Field(..., description="Conversion ID")
+    status: Literal["approved", "rejected", "invalid"] = Field(..., description="New status")
+
+
+class BulkUpdateConversionStatusRequest(BaseModel):
+    """Request model for bulk updating conversion statuses."""
+    conversion_ids: List[str] = Field(..., description="List of conversion IDs")
+    status: Literal["approved", "rejected", "invalid"] = Field(..., description="New status")
+
+
+class UpdateConversionStatusResponse(BaseModel):
+    """Response model for updating conversion status."""
+    status: str
+    message: str
+    conversion_id: Optional[str] = None
+    updated_count: Optional[int] = None
+
+
+# ============================================================================
 # WF4 - Default LP Alert
 # ============================================================================
 

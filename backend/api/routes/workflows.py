@@ -13,6 +13,8 @@ from backend.api.models import (
     TrackingLinkRequest, TrackingLinkResponse,
     TopLPsRequest, TopLPsResponse, LandingPageResult,
     ExportReportRequest, ExportReportResponse,
+    FetchConversionsRequest, FetchConversionsResponse, ConversionRecord, ConversionSummary, PaginationInfo,
+    UpdateConversionStatusRequest, BulkUpdateConversionStatusRequest, UpdateConversionStatusResponse,
     DefaultLPAlertRequest, DefaultLPAlertResponse, DefaultLPAlert,
     PausedPartnerRequest, PausedPartnerResponse, PausedPartnerAlert,
     WeeklySummaryRequest, WeeklySummaryResponse, SummaryDataPoint,
@@ -23,6 +25,7 @@ from backend.sql_agent.workflow_tools import (
     wf1_generate_tracking_link,
     wf2_identify_top_lps,
     wf3_export_report,
+    wf3_fetch_conversions,
     wf4_check_default_lp_alert,
     wf5_check_paused_partners,
     wf6_generate_weekly_summary
@@ -147,6 +150,118 @@ async def export_report(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to export report: {str(e)}"
+        )
+
+
+@router.post("/wf3/fetch-conversions", response_model=FetchConversionsResponse)
+async def fetch_conversions(
+    request: FetchConversionsRequest,
+    api_key: str = Depends(verify_api_key)
+) -> FetchConversionsResponse:
+    """
+    Fetch conversion data for viewing (WF3.1 - Conversion Report for Fraud Detection).
+    """
+    try:
+        # Convert filters to JSON string if provided
+        filters_str = json.dumps(request.filters) if request.filters else None
+        
+        result = wf3_fetch_conversions.invoke({
+            "report_type": request.report_type,
+            "date_range": request.date_range,
+            "filters": filters_str,
+            "page": request.page,
+            "page_size": request.page_size
+        })
+        
+        data = json.loads(result) if isinstance(result, str) else result
+        
+        if data.get("status") == "error":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=data.get("message", "Failed to fetch conversions")
+            )
+        
+        # Parse conversions
+        conversions_data = data.get("conversions", [])
+        conversions = [ConversionRecord(**conv) for conv in conversions_data]
+        
+        # Parse summary
+        summary_data = data.get("summary", {})
+        summary = ConversionSummary(**summary_data)
+        
+        # Parse pagination
+        pagination_data = data.get("pagination", {})
+        pagination = PaginationInfo(**pagination_data)
+        
+        return FetchConversionsResponse(
+            status=data.get("status", "success"),
+            report_type=data.get("report_type", request.report_type),
+            date_range=data.get("date_range", request.date_range),
+            summary=summary,
+            conversions=conversions,
+            pagination=pagination,
+            filters=data.get("filters"),
+            message=data.get("message")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch conversions: {str(e)}"
+        )
+
+
+@router.put("/wf3/conversions/{conversion_id}/status", response_model=UpdateConversionStatusResponse)
+async def update_conversion_status(
+    conversion_id: str,
+    request: UpdateConversionStatusRequest,
+    api_key: str = Depends(verify_api_key)
+) -> UpdateConversionStatusResponse:
+    """
+    Update the status of a single conversion (approve/reject).
+    """
+    try:
+        from backend.sql_agent.everflow_client import EverflowClient
+        client = EverflowClient()
+        
+        result = client.update_conversion_status(conversion_id, request.status)
+        
+        return UpdateConversionStatusResponse(
+            status="success",
+            message=f"Conversion {conversion_id} status updated to {request.status}",
+            conversion_id=conversion_id
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update conversion status: {str(e)}"
+        )
+
+
+@router.post("/wf3/conversions/bulk-status", response_model=UpdateConversionStatusResponse)
+async def bulk_update_conversion_status(
+    request: BulkUpdateConversionStatusRequest,
+    api_key: str = Depends(verify_api_key)
+) -> UpdateConversionStatusResponse:
+    """
+    Bulk update conversion statuses (approve/reject multiple).
+    """
+    try:
+        from backend.sql_agent.everflow_client import EverflowClient
+        client = EverflowClient()
+        
+        result = client.bulk_update_conversion_status(request.conversion_ids, request.status)
+        
+        return UpdateConversionStatusResponse(
+            status="success",
+            message=f"Updated {len(request.conversion_ids)} conversions to {request.status}",
+            updated_count=len(request.conversion_ids)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to bulk update conversion statuses: {str(e)}"
         )
 
 

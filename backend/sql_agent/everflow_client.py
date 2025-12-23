@@ -2,6 +2,7 @@
 Everflow API Client for fetching real data.
 """
 import os
+import json
 import requests
 from typing import Dict, List, Optional, Any
 from pathlib import Path
@@ -407,6 +408,111 @@ class EverflowClient:
         except Exception as e:
             print(f"Error fetching countries: {str(e)}")
             return []
+    
+    def fetch_conversions(
+        self,
+        columns: List[str],
+        filters: List[Dict],
+        from_date: str,
+        to_date: str,
+        page: int = 1,
+        page_size: int = 50
+    ) -> Dict:
+        """
+        Fetch conversion data for viewing (not exporting).
+        
+        Args:
+            columns: List of column names to include
+            filters: List of filter dictionaries
+            from_date: Start date (YYYY-MM-DD)
+            to_date: End date (YYYY-MM-DD)
+            page: Page number (default: 1)
+            page_size: Results per page (default: 50)
+        
+        Returns:
+            Dictionary with conversion data, summary, and pagination info
+        """
+        payload = {
+            "columns": columns,
+            "query": {"filters": filters},
+            "from": from_date,
+            "to": to_date,
+            "timezone_id": self.timezone_id,
+            "page": page,
+            "page_size": page_size
+        }
+        
+        # Try the conversions endpoint (without /export)
+        # If this doesn't exist, we might need to use the export endpoint and parse CSV
+        # For now, we'll try the standard endpoint
+        try:
+            response = self._request("POST", "/v1/networks/reporting/conversions", payload)
+            return response
+        except Exception as e:
+            # If the endpoint doesn't exist, we might need to use a different approach
+            # For now, return error
+            raise Exception(f"Failed to fetch conversions: {str(e)}")
+    
+    def update_conversion_status(
+        self,
+        conversion_id: str,
+        status: str
+    ) -> Dict:
+        """
+        Update the status of a conversion (approve/reject).
+        
+        Args:
+            conversion_id: The conversion ID
+            status: New status ("approved", "rejected", "invalid", etc.)
+        
+        Returns:
+            Success response
+        """
+        # Try common endpoint patterns for updating conversion status
+        # This might need to be adjusted based on actual Everflow API
+        try:
+            # Pattern 1: PUT /v1/networks/conversions/{conversion_id}/status
+            endpoint = f"/v1/networks/conversions/{conversion_id}/status"
+            payload = {"status": status}
+            response = self._request("PUT", endpoint, data=payload)
+            return response
+        except Exception as e:
+            # Pattern 2: POST /v1/networks/conversions/{conversion_id}/update
+            try:
+                endpoint = f"/v1/networks/conversions/{conversion_id}/update"
+                payload = {"status": status}
+                response = self._request("POST", endpoint, data=payload)
+                return response
+            except Exception as e2:
+                # Pattern 3: POST /v1/networks/conversions/bulk-status
+                # For bulk updates, we might need a different endpoint
+                raise Exception(f"Failed to update conversion status. Tried multiple endpoints. Last error: {str(e2)}")
+    
+    def bulk_update_conversion_status(
+        self,
+        conversion_ids: List[str],
+        status: str
+    ) -> Dict:
+        """
+        Bulk update conversion statuses.
+        
+        Args:
+            conversion_ids: List of conversion IDs
+            status: New status ("approved", "rejected", "invalid", etc.)
+        
+        Returns:
+            Success response with count of updated conversions
+        """
+        try:
+            endpoint = "/v1/networks/conversions/bulk-status"
+            payload = {
+                "conversion_ids": conversion_ids,
+                "status": status
+            }
+            response = self._request("POST", endpoint, data=payload)
+            return response
+        except Exception as e:
+            raise Exception(f"Failed to bulk update conversion statuses: {str(e)}")
 
 
 def fetch_real_data() -> Dict[str, Any]:

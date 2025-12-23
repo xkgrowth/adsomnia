@@ -60,6 +60,25 @@ WORKFLOW_DESCRIPTIONS = {
     Returns a download URL for the CSV file.
     """,
     
+    "wf3_fetch_conversions": """
+    Fetch conversion data for viewing (not exporting). Use this when users want to VIEW conversion reports, especially for fraud detection.
+    
+    Required parameters:
+    - report_type: Type of report ("fraud" or "conversions")
+    - date_range: Natural language date range (e.g., "last week", "last month", "year to date")
+    
+    Optional parameters:
+    - filters: JSON string of filters. Supports both IDs and names - names will be automatically resolved to IDs.
+      * Example with IDs: '{"offer_id": 123, "affiliate_id": 456, "source_id": 134505}'
+      * Example with names: '{"offer_name": "Papoaolado - BR - DOI - (Responsive)", "affiliate_name": "iMonetizeIt", "source_id": 134505}'
+      * Supported filter keys: offer_id, offer_name, affiliate_id, affiliate_name, source_id
+      * If using names, the tool will automatically resolve them to IDs
+    - page: Page number (default: 1)
+    - page_size: Results per page (default: 50, max: 100)
+    
+    Returns conversion data with summary statistics for viewing in the UI.
+    """,
+    
     "wf4_check_default_lp_alert": """
     Check for traffic to default landing pages (scheduled alert workflow).
     This is typically run automatically, but can be triggered manually.
@@ -688,31 +707,16 @@ def wf3_export_report(
         except:
             pass
     
-    # Resolve entity names in filters
+    # Resolve entity names in filters using centralized resolver (workflow-agnostic)
     if filters_dict:
-        # Resolve offer_id or offer_name
-        if "offer_name" in filters_dict:
-            resolved_offer_id = resolver.resolve_offer(filters_dict["offer_name"])
-            if resolved_offer_id:
-                filters_dict["offer_id"] = resolved_offer_id
-                del filters_dict["offer_name"]
-            else:
-                return json.dumps({
-                    "status": "error",
-                    "message": f"Could not find offer: {filters_dict['offer_name']}"
-                })
-        
-        # Resolve affiliate_id or affiliate_name
-        if "affiliate_name" in filters_dict:
-            resolved_aff_id = resolver.resolve_affiliate(filters_dict["affiliate_name"])
-            if resolved_aff_id:
-                filters_dict["affiliate_id"] = resolved_aff_id
-                del filters_dict["affiliate_name"]
-            else:
-                return json.dumps({
-                    "status": "error",
-                    "message": f"Could not find affiliate: {filters_dict['affiliate_name']}"
-                })
+        try:
+            filters_dict = resolver.resolve_filters(filters_dict)
+        except ValueError as e:
+            # Return error if entity resolution failed
+            return json.dumps({
+                "status": "error",
+                "message": str(e)
+            })
     
     # TODO: Implement actual Everflow API call and date parsing
     return json.dumps({
@@ -724,6 +728,191 @@ def wf3_export_report(
         "download_url": f"https://api.everflow.io/exports/{report_type}_report_123.csv",
         "expires_in": "24 hours"
     })
+
+
+@tool
+def wf3_fetch_conversions(
+    report_type: str,
+    date_range: str,
+    filters: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50
+) -> str:
+    """
+    Fetch conversion data for viewing (not exporting).
+    Use this when the user wants to VIEW conversion data, especially for fraud detection.
+    For exporting to CSV, use wf3_export_report instead.
+    
+    Args:
+        report_type: Type of report ("fraud", "conversions")
+        date_range: Natural language date range (e.g., "last week", "last month", "year to date")
+        filters: Optional JSON string of filters. Supports both IDs and names:
+            - IDs: '{"offer_id": 123, "affiliate_id": 456, "source_id": 134505}'
+            - Names (will be resolved automatically): '{"offer_name": "Papoaolado - BR - DOI", "affiliate_name": "iMonetizeIt", "source_id": 134505}'
+            - Supported keys: offer_id, offer_name, affiliate_id, affiliate_name, source_id
+        page: Page number (default: 1)
+        page_size: Results per page (default: 50, max: 100)
+    
+    Returns:
+        JSON string with conversion data, summary statistics, and pagination info
+    """
+    resolver = get_resolver()
+    
+    # Parse filters if provided
+    filters_dict = None
+    if filters:
+        try:
+            filters_dict = json.loads(filters) if isinstance(filters, str) else filters
+        except:
+            pass
+    
+    # Resolve entity names in filters using centralized resolver (workflow-agnostic)
+    if filters_dict:
+        try:
+            filters_dict = resolver.resolve_filters(filters_dict)
+        except ValueError as e:
+            # Return error if entity resolution failed
+            return json.dumps({
+                "status": "error",
+                "message": str(e)
+            })
+    
+    # Parse date range
+    from datetime import datetime, timedelta
+    today = datetime.now()
+    
+    date_mappings = {
+        "last week": (today - timedelta(days=7), today - timedelta(days=1)),
+        "this week": (today - timedelta(days=today.weekday()), today),
+        "last month": (
+            (today.replace(day=1) - timedelta(days=1)).replace(day=1),
+            today.replace(day=1) - timedelta(days=1)
+        ),
+        "this month": (today.replace(day=1), today),
+        "last 7 days": (today - timedelta(days=7), today),
+        "last 30 days": (today - timedelta(days=30), today),
+        "last month": (today - timedelta(days=30), today),  # Approximate
+    }
+    
+    # Check for "year to date"
+    if "year to date" in date_range.lower() or "ytd" in date_range.lower():
+        from_date = datetime(today.year, 1, 1)
+        to_date = today
+    elif date_range.lower() in date_mappings:
+        from_date, to_date = date_mappings[date_range.lower()]
+    else:
+        # Default to last 30 days
+        from_date = today - timedelta(days=30)
+        to_date = today
+    
+    from_date_str = from_date.strftime("%Y-%m-%d")
+    to_date_str = to_date.strftime("%Y-%m-%d")
+    
+    # Build API filters
+    api_filters = []
+    
+    if filters_dict:
+        if "offer_id" in filters_dict:
+            api_filters.append({
+                "resource_type": "offer",
+                "filter_id_value": str(filters_dict["offer_id"])
+            })
+        if "affiliate_id" in filters_dict:
+            api_filters.append({
+                "resource_type": "affiliate",
+                "filter_id_value": str(filters_dict["affiliate_id"])
+            })
+        if "source_id" in filters_dict:
+            api_filters.append({
+                "resource_type": "source",
+                "filter_id_value": str(filters_dict["source_id"])
+            })
+    
+    # Add fraud filter if report_type is "fraud"
+    if report_type.lower() == "fraud":
+        api_filters.append({
+            "filter_type": "is_fraud",
+            "filter_value": True
+        })
+    
+    # Default columns for conversion reports
+    default_columns = [
+        "conversion_id", "click_id", "status", "date", "click_date",
+        "sub1", "offer", "partner", "delta", "payout", "revenue",
+        "conversion_ip", "transaction_id", "offer_events", "adv1", "adv2",
+        "event_name", "is_fraud", "fraud_reason"
+    ]
+    
+    try:
+        from .everflow_client import EverflowClient
+        client = EverflowClient()
+        
+        # Fetch conversions
+        response = client.fetch_conversions(
+            columns=default_columns,
+            filters=api_filters,
+            from_date=from_date_str,
+            to_date=to_date_str,
+            page=page,
+            page_size=page_size
+        )
+        
+        # Process response to extract summary statistics
+        conversions = response.get("table", []) or response.get("conversions", [])
+        paging = response.get("paging", {})
+        
+        # Calculate summary statistics
+        total = len(conversions)
+        status_counts = {}
+        total_payout = 0
+        total_revenue = 0
+        total_gross_sales = 0
+        
+        for conv in conversions:
+            status = conv.get("status", "unknown")
+            status_counts[status] = status_counts.get(status, 0) + 1
+            
+            payout = float(conv.get("payout", 0) or 0)
+            revenue = float(conv.get("revenue", 0) or 0)
+            gross_sales = float(conv.get("gross_sales", 0) or 0)
+            
+            total_payout += payout
+            total_revenue += revenue
+            total_gross_sales += gross_sales
+        
+        summary = {
+            "total": total,
+            "approved": status_counts.get("approved", 0),
+            "invalid": status_counts.get("invalid", 0),
+            "pending": status_counts.get("pending", 0),
+            "rejected_manual": status_counts.get("rejected_manual", 0),
+            "rejected_throttle": status_counts.get("rejected_throttle", 0),
+            "payout": round(total_payout, 2),
+            "revenue": round(total_revenue, 2),
+            "gross_sales": round(total_gross_sales, 2)
+        }
+        
+        return json.dumps({
+            "status": "success",
+            "report_type": report_type,
+            "date_range": f"{from_date_str} to {to_date_str}",
+            "summary": summary,
+            "conversions": conversions,
+            "pagination": {
+                "page": paging.get("current_page", page),
+                "page_size": paging.get("page_size", page_size),
+                "total_count": paging.get("total_count", total),
+                "total_pages": paging.get("total_pages", 1)
+            },
+            "filters": filters_dict or {},
+            "_format_hint": "conversion_report"  # Special hint for agent
+        })
+        
+    except Exception as e:
+        return json.dumps({
+            "status": "error",
+            "message": f"Failed to fetch conversions: {str(e)}"
+        })
 
 
 @tool
@@ -847,6 +1036,7 @@ def get_workflow_tools():
         wf2_identify_top_lps,
         query_top_offers,  # Utility tool for querying top offers
         wf3_export_report,
+        wf3_fetch_conversions,  # For viewing conversion reports (fraud detection)
         wf4_check_default_lp_alert,
         wf5_check_paused_partners,
         wf6_generate_weekly_summary,
