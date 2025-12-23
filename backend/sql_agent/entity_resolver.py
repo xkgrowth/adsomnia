@@ -387,11 +387,13 @@ class EntityResolver:
                     for offer, sim in suggestions
                 ]
                 
-                # Check if suggestions contain a perfect match (100% similarity) that we should auto-use
-                perfect_match = next((s for s in suggestions_list if s.get("similarity", 0) >= 100.0), None)
-                if perfect_match:
-                    offer_id = perfect_match.get("offer_id")
-                    print(f"✅ Perfect match found in suggestions: Offer ID {offer_id} = '{perfect_match.get('offer_name')}' (100% match)")
+                # Check if suggestions contain a good match (>= 85% similarity) that we should auto-use
+                # This catches cases where the main loop missed a match due to normalization differences
+                good_match = next((s for s in suggestions_list if s.get("similarity", 0) >= 85.0), None)
+                if good_match:
+                    offer_id = good_match.get("offer_id")
+                    similarity = good_match.get("similarity", 0)
+                    print(f"✅ Good match found in suggestions: Offer ID {offer_id} = '{good_match.get('offer_name')}' ({similarity}% match)")
                     self._offer_cache[search_name] = offer_id
                     if return_suggestions:
                         return offer_id, []

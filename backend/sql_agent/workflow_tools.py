@@ -190,24 +190,34 @@ def wf2_identify_top_lps(
     # Resolve offer name to ID with suggestions
     resolved_offer_id, suggestions = resolver.resolve_offer(offer_id, return_suggestions=True)
     
-    # Auto-use 100% matches (similarity >= 100%)
+    # Auto-use good matches (similarity >= 85%) from suggestions if resolver didn't find one
     if resolved_offer_id is None and suggestions:
-        # Check if there's a perfect match (100% similarity)
-        perfect_match = next((s for s in suggestions if s.get("similarity", 0) >= 100.0), None)
-        if perfect_match:
-            resolved_offer_id = perfect_match.get("offer_id")
-            print(f"✅ Auto-using perfect match: {perfect_match.get('offer_name')} (ID: {resolved_offer_id}, 100% match)")
+        # Check if there's a good match (>= 85% similarity)
+        good_match = next((s for s in suggestions if s.get("similarity", 0) >= 85.0), None)
+        if good_match:
+            resolved_offer_id = good_match.get("offer_id")
+            similarity = good_match.get("similarity", 0)
+            print(f"✅ Auto-using good match: {good_match.get('offer_name')} (ID: {resolved_offer_id}, {similarity}% match)")
     
     if resolved_offer_id is None:
         # Build error message with suggestions
-        error_msg = f"Could not find offer: {offer_id}."
-        if suggestions:
-            error_msg += f"\n\nDid you mean one of these?\n"
-            for sug in suggestions[:5]:
-                similarity = sug.get("similarity", 0)
-                error_msg += f"* {sug.get('offer_name', 'Unknown')} (ID: {sug.get('offer_id')}, {similarity}% match)\n"
+        # Only say "couldn't find" if there are no suggestions at all
+        if not suggestions:
+            error_msg = f"Could not find offer: {offer_id}. Please provide a valid offer ID or name."
         else:
-            error_msg += " Please provide a valid offer ID or name."
+            # If we have suggestions, be more helpful
+            best_match = suggestions[0] if suggestions else None
+            best_similarity = best_match.get("similarity", 0) if best_match else 0
+            
+            if best_similarity >= 85.0:
+                # This shouldn't happen (should have been auto-used), but handle it gracefully
+                error_msg = f"Found similar offer: {best_match.get('offer_name')} (ID: {best_match.get('offer_id')}, {best_similarity}% match)."
+            else:
+                error_msg = f"Could not find exact match for '{offer_id}'. Did you mean one of these?\n"
+                for sug in suggestions[:5]:
+                    similarity = sug.get("similarity", 0)
+                    error_msg += f"* {sug.get('offer_name', 'Unknown')} (ID: {sug.get('offer_id')}, {similarity}% match)\n"
+                error_msg += "\nPlease provide the correct offer ID or name."
         
         return json.dumps({
             "status": "error",
