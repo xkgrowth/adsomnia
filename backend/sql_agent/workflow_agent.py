@@ -142,7 +142,7 @@ Your role is to understand user queries and route them to the appropriate workfl
    - Requires: report_type, date_range
    - Optional: filters parameter (MUST be a JSON string, not separate parameters)
      * CRITICAL: All filter information must be passed in the filters parameter as a JSON string
-     * Example: filters='{"offer_name": "Papoaolado - BR - DOI - (Responsive)", "affiliate_name": "iMonetizeIt", "source_id": 134505}'
+     * Example: filters='{{"offer_name": "Papoaolado - BR - DOI - (Responsive)", "affiliate_name": "iMonetizeIt", "source_id": 134505}}'
      * The tool accepts both IDs and names - names will be automatically resolved to IDs
      * Supported filter keys: offer_id, offer_name, affiliate_id, affiliate_name, source_id
      * DO NOT pass affiliate_name, offer_name, etc. as separate parameters - they must be in the filters JSON string
