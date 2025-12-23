@@ -491,6 +491,167 @@ def wf2_identify_top_lps(
 
 
 @tool
+def query_top_offers(
+    days: int = 30,
+    min_leads: int = 0,
+    top_n: int = 10,
+    country_code: Optional[Union[str, int]] = None,
+    label: Optional[str] = None,
+    sort_by: str = "cv"  # "cv", "revenue", "payout", "cvr"
+) -> str:
+    """
+    Query top offers by aggregating offer-level metrics.
+    Use this when users ask for "top offers", "best performing offers", "offers with highest conversions", etc.
+    
+    Args:
+        days: Number of days to analyze (default: 30)
+        min_leads: Minimum conversions for significance (default: 0)
+        top_n: Number of results to return (default: 10)
+        country_code: Optional ISO country code (US, DE, FR, etc.) or country name
+        label: Optional label filter (e.g., "Advertiser_Internal")
+        sort_by: Metric to sort by - "cv" (conversions), "revenue", "payout", "cvr" (conversion rate)
+    
+    Returns:
+        JSON string with top N offers
+    """
+    try:
+        from .everflow_client import EverflowClient
+        from datetime import datetime, timedelta
+        
+        client = EverflowClient()
+        
+        # Calculate date range
+        to_date = datetime.now()
+        if days >= 300:
+            # Year to date
+            from_date = datetime(to_date.year, 1, 1)
+        else:
+            from_date = to_date - timedelta(days=days)
+        
+        # Build columns - query by offer (not offer_url)
+        columns = [
+            {"column": "offer"}
+        ]
+        if country_code:
+            columns.append({"column": "country"})
+        
+        # Build filters
+        filters = []
+        if country_code:
+            resolver = get_resolver()
+            resolved_country = resolver.resolve_country(country_code)
+            if resolved_country:
+                filters.append({
+                    "resource_type": "country",
+                    "filter_id_value": resolved_country
+                })
+        
+        if label:
+            filters.append({
+                "resource_type": "label",
+                "filter_id_value": label
+            })
+        
+        # Build payload
+        payload = {
+            "columns": columns,
+            "query": {"filters": filters} if filters else {},
+            "from": from_date.strftime("%Y-%m-%d"),
+            "to": to_date.strftime("%Y-%m-%d"),
+            "timezone_id": client.timezone_id,
+            "currency_id": "EUR"
+        }
+        
+        # Make API call
+        response = client._request("POST", "/v1/networks/reporting/entity", data=payload)
+        table = response.get("table", [])
+        
+        # Process and aggregate results by offer
+        processed_offers = []
+        for row in table:
+            reporting = row.get("reporting", {})
+            clicks = reporting.get("total_click", 0) or reporting.get("clicks", 0) or 0
+            conversions = reporting.get("cv", 0) or reporting.get("total_cv", 0) or reporting.get("conversions", 0) or 0
+            revenue = reporting.get("revenue", 0.0) or 0.0
+            payout = reporting.get("payout", 0.0) or 0.0
+            cvr = reporting.get("cvr", 0.0) or 0.0
+            
+            # Filter by minimum conversions
+            if conversions < min_leads:
+                continue
+            
+            # Extract offer info
+            offer_id = None
+            offer_name = "Unknown Offer"
+            
+            columns_data = row.get("columns", [])
+            for col in columns_data:
+                if col.get("column_type") == "offer":
+                    offer_id = col.get("id")
+                    offer_name = col.get("label", f"Offer {offer_id}")
+                    break
+            
+            if not offer_id:
+                offer_id = row.get("offer_id")
+                offer_name = row.get("offer_name") or row.get("advertiser_name") or row.get("offer") or f"Offer {offer_id or 'Unknown'}"
+            
+            # Calculate metrics
+            epc = round(payout / clicks, 4) if clicks > 0 else 0.0
+            rpc = round(revenue / clicks, 4) if clicks > 0 else 0.0
+            profit = revenue - payout
+            
+            processed_offers.append({
+                "offer_id": offer_id,
+                "offer_name": offer_name,
+                "cv": int(conversions),
+                "cvr": round(cvr, 2),
+                "revenue": round(revenue, 2),
+                "payout": round(payout, 2),
+                "profit": round(profit, 2),
+                "clicks": int(clicks),
+                "epc": epc,
+                "rpc": rpc
+            })
+        
+        # Sort by requested metric
+        sort_key_map = {
+            "cv": "cv",
+            "conversions": "cv",
+            "revenue": "revenue",
+            "payout": "payout",
+            "cvr": "cvr",
+            "conversion_rate": "cvr"
+        }
+        sort_key = sort_key_map.get(sort_by.lower(), "cv")
+        
+        processed_offers.sort(key=lambda x: x.get(sort_key, 0), reverse=True)
+        
+        # Return top N
+        top_offers = processed_offers[:top_n]
+        
+        if not top_offers:
+            return json.dumps({
+                "status": "error",
+                "message": f"No offers found with at least {min_leads} conversions in the last {days} days."
+            })
+        
+        return json.dumps({
+            "status": "success",
+            "period_days": days,
+            "sort_by": sort_by,
+            "top_offers": top_offers,
+            "_format_hint": "table"
+        })
+        
+    except Exception as e:
+        print(f"Error querying top offers: {str(e)}")
+        return json.dumps({
+            "status": "error",
+            "message": f"Failed to query offers: {str(e)}"
+        })
+
+
+@tool
 def wf3_export_report(
     report_type: str,
     date_range: str,
@@ -679,11 +840,12 @@ def get_workflow_tools():
     Get all workflow tools for the agent.
     
     Returns:
-        List of LangChain tools for workflows WF1-WF6
+        List of LangChain tools for workflows WF1-WF6 plus utility tools
     """
     return [
         wf1_generate_tracking_link,
         wf2_identify_top_lps,
+        query_top_offers,  # Utility tool for querying top offers
         wf3_export_report,
         wf4_check_default_lp_alert,
         wf5_check_paused_partners,

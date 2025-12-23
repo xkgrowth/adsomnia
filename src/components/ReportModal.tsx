@@ -335,10 +335,57 @@ function ExportFieldSelector({
   const allExportFields = getAvailableExportFields(reportType);
   const fieldsByCategory = getFieldsByCategory(allExportFields);
   
-  // Initialize with table columns selected by default
-  const [selectedColumns, setSelectedColumns] = useState<Set<string>>(
-    new Set(availableColumns)
-  );
+  // Map table column names to export field IDs
+  // Table shows: "Offer", "Offer URL", "CV", "CVR", "EPC", "RPC", "Payout"
+  // Export fields use: "offer", "offer_url", "cv", "cvr", "epc", "rpc", "payout"
+  const columnNameToFieldId: Record<string, string> = {
+    "Offer": "offer_name",
+    "Offer URL": "offer_url_name",
+    "CV": "cv",
+    "CVR": "cvr",
+    "EPC": "epc",
+    "RPC": "rpc",
+    "Payout": "payout",
+    "Revenue": "revenue",
+    "Clicks": "clicks",
+    "Profit": "profit",
+    "Conversions": "cv",
+    "Conversion Rate": "cvr",
+    "Landing Page": "offer_url_name",
+  };
+  
+  // Map available table columns to export field IDs
+  // Try exact match first, then fallback to lowercase with underscores
+  const defaultSelectedFieldIds = availableColumns
+    .map(col => {
+      // Try exact match
+      if (columnNameToFieldId[col]) {
+        return columnNameToFieldId[col];
+      }
+      // Try lowercase with underscores
+      const normalized = col.toLowerCase().replace(/\s+/g, '_');
+      // Check if this normalized ID exists in export fields
+      if (allExportFields.some(field => field.id === normalized)) {
+        return normalized;
+      }
+      // Return null if no match found
+      return null;
+    })
+    .filter((id): id is string => id !== null && allExportFields.some(field => field.id === id));
+  
+  // Initialize with table columns selected by default (mapped to field IDs)
+  // If no matches found, at least select the first few common fields
+  const [selectedColumns, setSelectedColumns] = useState<Set<string>>(() => {
+    if (defaultSelectedFieldIds.length > 0) {
+      return new Set(defaultSelectedFieldIds);
+    }
+    // Fallback: select common fields if available
+    const commonFields = ['offer_name', 'offer_url_name', 'cv', 'cvr', 'payout'];
+    const availableCommonFields = commonFields.filter(id => 
+      allExportFields.some(field => field.id === id)
+    );
+    return new Set(availableCommonFields);
+  });
 
   const toggleColumn = (column: string) => {
     const newSelected = new Set(selectedColumns);
@@ -389,27 +436,32 @@ function ExportFieldSelector({
                   {category}
                 </h4>
                 <div className="space-y-1">
-                  {fields.map((field) => (
-                    <label
-                      key={field.id}
-                      className="flex items-center gap-2 p-2 hover:bg-bg-secondary rounded cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedColumns.has(field.id)}
-                        onChange={() => toggleColumn(field.id)}
-                        className="w-4 h-4 border-2 border-accent-yellow rounded bg-bg-primary cursor-pointer checked:bg-accent-yellow checked:border-accent-yellow focus:ring-2 focus:ring-accent-yellow focus:ring-offset-2 focus:ring-offset-bg-primary transition-colors"
-                      />
-                      <div className="flex-1">
-                        <span className="text-sm text-text-primary">{field.label}</span>
-                        {field.description && (
-                          <span className="text-xs text-text-secondary block mt-0.5">
-                            {field.description}
+                  {fields.map((field) => {
+                    const isSelected = selectedColumns.has(field.id);
+                    return (
+                      <label
+                        key={field.id}
+                        className="flex items-center gap-2 p-2 hover:bg-bg-secondary rounded cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleColumn(field.id)}
+                          className="w-4 h-4 border-2 border-accent-yellow rounded bg-bg-primary cursor-pointer checked:bg-accent-yellow checked:border-accent-yellow focus:ring-2 focus:ring-accent-yellow focus:ring-offset-2 focus:ring-offset-bg-primary transition-colors"
+                        />
+                        <div className="flex-1">
+                          <span className={`text-sm ${isSelected ? 'text-accent-yellow font-medium' : 'text-text-primary'}`}>
+                            {field.label}
                           </span>
-                        )}
-                      </div>
-                    </label>
-                  ))}
+                          {field.description && (
+                            <span className="text-xs text-text-secondary block mt-0.5">
+                              {field.description}
+                            </span>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
             ))}

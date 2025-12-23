@@ -350,7 +350,16 @@ export default function Chat() {
         alert('Export failed: ' + (response.message || 'Unknown error'));
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to export report';
+      let errorMessage = 'Failed to export report';
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      } else if (typeof err === 'string') {
+        errorMessage = err;
+      } else if (err && typeof err === 'object') {
+        // Handle error objects
+        const errorObj = err as any;
+        errorMessage = errorObj.message || errorObj.detail || errorObj.error || JSON.stringify(errorObj);
+      }
       alert('Export error: ' + errorMessage);
     }
   };

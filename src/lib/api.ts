@@ -253,8 +253,20 @@ export async function exportReportCSV(
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-      throw new Error(error.detail || `HTTP ${response.status}`);
+      let errorMessage = `HTTP ${response.status}`;
+      try {
+        const error = await response.json();
+        errorMessage = error.detail || error.message || error.error || JSON.stringify(error);
+      } catch (e) {
+        // If JSON parsing fails, try to get text
+        try {
+          const errorText = await response.text();
+          errorMessage = errorText || errorMessage;
+        } catch (e2) {
+          // Keep default error message
+        }
+      }
+      throw new Error(errorMessage);
     }
 
     return await response.json();
