@@ -65,31 +65,47 @@ const FALLBACK_OFFERS = getFallbackOffers();
 
 // Generate example queries using real IDs
 const generateExampleQueries = (affiliates: Affiliate[], offers: Offer[]): ExampleQueryCategory[] => {
-  const aff1 = affiliates[0];
-  const aff2 = affiliates[1] || affiliates[0];
   const offer1 = offers[0];
   const offer2 = offers[1] || offers[0];
   const offer3 = offers[2] || offers[0];
+  const offer4 = offers[3] || offers[0];
+  const offer5 = offers[4] || offers[0];
+
+  // Find Matchaora offer if available, otherwise use first offer
+  const matchaoraOffer = offers.find(o => 
+    o.offer_name.toLowerCase().includes('matchaora')
+  ) || offer1;
 
   return [
     {
-      category: "Landing Pages",
+      category: "WF2: Identify Top-Performing Landing Pages",
       queries: [
-        offer1 ? `Which landing pages work best for ${offer1.offer_name}?` : "Which landing pages work best for Summer Promo 2024?",
-        offer1 ? `Show me top 3 landing pages for ${offer1.offer_name} in the US` : "Show me top 3 landing pages for Summer Promo 2024 in the US",
-        aff1 ? `What's the best converting LP for ${aff1.affiliate_name}?` : "What's the best converting LP for Premium Traffic Partners?",
-        offer2 ? `Top landing pages for ${offer2.offer_name} in Germany` : "Top landing pages for Holiday Special in Germany",
-        offer2 ? `Which LPs perform best for ${offer2.offer_name}?` : "Which LPs perform best for Holiday Special?",
+        // Exact match to user's manual process
+        `Show me top landing pages for Matchaora - IT - DOI - (Responsive) year to date with conversions greater than 50 and Advertiser_Internal label`,
+        
+        // Variations with different offers
+        offer1 ? `Which landing pages perform best for ${offer1.offer_name} year to date with conversions greater than 50?` : "Which landing pages perform best for Summer Promo 2024 year to date with conversions greater than 50?",
+        offer2 ? `Top performing landing pages for ${offer2.offer_name} with Advertiser_Internal label and CV greater than 50` : "Top performing landing pages for Holiday Special with Advertiser_Internal label and CV greater than 50",
+        offer3 ? `Show me best converting landing pages for ${offer3.offer_name} year to date` : "Show me best converting landing pages for Instantplaymate year to date",
+        
+        // Different date ranges
+        offer1 ? `Top landing pages for ${offer1.offer_name} in the last 30 days with conversions greater than 50` : "Top landing pages for Summer Promo 2024 in the last 30 days with conversions greater than 50",
+        offer2 ? `Which landing pages work best for ${offer2.offer_name} last week?` : "Which landing pages work best for Holiday Special last week?",
+        
+        // Different metrics and filters
+        offer1 ? `Show me landing pages for ${offer1.offer_name} with highest conversion rate year to date` : "Show me landing pages for Summer Promo 2024 with highest conversion rate year to date",
+        offer3 ? `Top 5 landing pages for ${offer3.offer_name} with Advertiser_Internal label and minimum 100 conversions` : "Top 5 landing pages for Instantplaymate with Advertiser_Internal label and minimum 100 conversions",
       ],
     },
     {
-      category: "Export Reports",
+      category: "WF3: Search, Compile, and Export Reports",
       queries: [
         "Export fraud report for last week",
         offer1 ? `Download conversion data for ${offer1.offer_name} from December` : "Download conversion data for Summer Promo 2024 from December",
         "Get me a CSV of conversions with tracking parameters for last month",
         offer1 ? `Export stats for ${offer1.offer_name} from November 1st to 15th` : "Export stats for Summer Promo 2024 from November 1st to 15th",
-        aff1 ? `Pull a scrub analysis report for ${aff1.affiliate_name}` : "Pull a scrub analysis report for Premium Traffic Partners",
+        "Pull a scrub analysis report for the past 7 days",
+        "Export conversion report with sub1, sub2, and affiliate columns for last 30 days",
       ],
     },
   ];
