@@ -206,9 +206,14 @@ async def fetch_conversions(
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        error_details = str(e)
+        traceback_str = traceback.format_exc()
+        print(f"❌ Error in fetch_conversions endpoint: {error_details}")
+        print(f"❌ Traceback: {traceback_str}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch conversions: {str(e)}"
+            detail=f"Failed to fetch conversions: {error_details}"
         )
 
 

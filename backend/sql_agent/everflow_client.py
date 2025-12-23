@@ -445,13 +445,22 @@ class EverflowClient:
         # Try the conversions endpoint (without /export)
         # If this doesn't exist, we might need to use the export endpoint and parse CSV
         # For now, we'll try the standard endpoint
+        print(f"🔍 Calling Everflow API: POST /v1/networks/reporting/conversions")
+        print(f"🔍 Payload: {json.dumps(payload, indent=2)}")
         try:
             response = self._request("POST", "/v1/networks/reporting/conversions", payload)
             return response
         except Exception as e:
-            # If the endpoint doesn't exist, we might need to use a different approach
-            # For now, return error
-            raise Exception(f"Failed to fetch conversions: {str(e)}")
+            # Extract detailed error information
+            error_msg = str(e)
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    error_json = e.response.json()
+                    error_msg = f"Everflow API Error: {json.dumps(error_json, indent=2)}"
+                except:
+                    error_msg = f"Everflow API Error: {e.response.text if hasattr(e.response, 'text') else str(e)}"
+            print(f"❌ Everflow API call failed: {error_msg}")
+            raise Exception(f"Failed to fetch conversions: {error_msg}")
     
     def update_conversion_status(
         self,

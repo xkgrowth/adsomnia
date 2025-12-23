@@ -847,6 +847,15 @@ def wf3_fetch_conversions(
         from .everflow_client import EverflowClient
         client = EverflowClient()
         
+        # Debug logging
+        print(f"🔍 wf3_fetch_conversions called with:")
+        print(f"   report_type: {report_type}")
+        print(f"   date_range: {date_range}")
+        print(f"   from_date: {from_date_str}, to_date: {to_date_str}")
+        print(f"   filters_dict: {filters_dict}")
+        print(f"   api_filters: {json.dumps(api_filters, indent=2)}")
+        print(f"   page: {page}, page_size: {page_size}")
+        
         # Fetch conversions
         response = client.fetch_conversions(
             columns=default_columns,
