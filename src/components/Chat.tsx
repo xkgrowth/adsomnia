@@ -337,7 +337,7 @@ export default function Chat() {
         report_type: currentReportData.metadata.reportType || 'stats',
         date_range: currentReportData.metadata.dateRange || 'last 30 days',
         columns: selectedColumns,
-        filters: currentReportData.metadata.filters,
+        filters: currentReportData.metadata?.filters,
         selected_rows: selectedRows.map((row) => row.id),
       };
 

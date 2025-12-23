@@ -18,6 +18,8 @@ export interface ReportData {
     dateRange?: string;
     parentColumn?: string;
     childColumn?: string;
+    filters?: Record<string, any>;
+    originalQuery?: string;
   };
 }
 
