@@ -230,7 +230,7 @@ export default function Chat() {
           });
           
           return {
-            columns: columns.map(col => ({ key: col, label: col, sortable: true })),
+            columns,
             rows,
             metadata: {
               reportType: 'stats',
