@@ -350,11 +350,15 @@ class EntityResolver:
                         best_match = offer
             
             # If we found a good fuzzy match (similarity >= 0.85), use it automatically
+            # Also auto-use perfect matches (100% similarity) even if return_suggestions=True
             if best_match and best_similarity >= 0.85:
                 offer_id = best_match.get("offer_id")
                 print(f"✅ Fuzzy match found: Offer ID {offer_id} = '{best_match.get('offer_name', '')}' (similarity: {best_similarity:.2%})")
                 self._offer_cache[search_name] = offer_id
+                # Always return the ID for matches >= 85%, even if return_suggestions=True
+                # The caller can still get suggestions if needed, but we prioritize the match
                 if return_suggestions:
+                    # Return the ID and empty suggestions since we found a match
                     return offer_id, []
                 return offer_id
             

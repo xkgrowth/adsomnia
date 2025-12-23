@@ -187,48 +187,32 @@ def wf2_identify_top_lps(
     """
     resolver = get_resolver()
     
-    # Resolve offer name to ID
-    resolved_offer_id = resolver.resolve_offer(offer_id)
+    # Resolve offer name to ID with suggestions
+    resolved_offer_id, suggestions = resolver.resolve_offer(offer_id, return_suggestions=True)
+    
+    # Auto-use 100% matches (similarity >= 100%)
+    if resolved_offer_id is None and suggestions:
+        # Check if there's a perfect match (100% similarity)
+        perfect_match = next((s for s in suggestions if s.get("similarity", 0) >= 100.0), None)
+        if perfect_match:
+            resolved_offer_id = perfect_match.get("offer_id")
+            print(f"✅ Auto-using perfect match: {perfect_match.get('offer_name')} (ID: {resolved_offer_id}, 100% match)")
+    
     if resolved_offer_id is None:
-        # Try to find similar offers for better error message
-        try:
-            from .everflow_client import EverflowClient
-            client = EverflowClient()
-            # Fetch ALL offers to find similar ones (no limit)
-            all_offers = client.get_offers(limit=None)
-            
-            # Find offers with similar names (fuzzy match on first word)
-            search_term = str(offer_id).lower().strip()
-            search_words = [w for w in search_term.split() if len(w) > 2]
-            similar_offers = []
-            
-            if search_words:
-                first_word = search_words[0]
-                for offer in all_offers[:20]:  # Check first 20 for suggestions
-                    offer_name = str(offer.get("offer_name", "")).lower()
-                    if first_word in offer_name:
-                        similar_offers.append({
-                            "offer_id": offer.get("offer_id"),
-                            "offer_name": offer.get("offer_name")
-                        })
-            
-            error_msg = f"Could not find offer: {offer_id}."
-            if similar_offers:
-                error_msg += f"\n\nDid you mean one of these?\n"
-                for similar in similar_offers[:5]:
-                    error_msg += f"- {similar['offer_name']} (ID: {similar['offer_id']})\n"
-            else:
-                error_msg += " Please provide a valid offer ID or name."
-            
-            return json.dumps({
-                "status": "error",
-                "message": error_msg
-            })
-        except Exception as e:
-            return json.dumps({
-                "status": "error",
-                "message": f"Could not find offer: {offer_id}. Please provide a valid offer ID or name."
-            })
+        # Build error message with suggestions
+        error_msg = f"Could not find offer: {offer_id}."
+        if suggestions:
+            error_msg += f"\n\nDid you mean one of these?\n"
+            for sug in suggestions[:5]:
+                similarity = sug.get("similarity", 0)
+                error_msg += f"* {sug.get('offer_name', 'Unknown')} (ID: {sug.get('offer_id')}, {similarity}% match)\n"
+        else:
+            error_msg += " Please provide a valid offer ID or name."
+        
+        return json.dumps({
+            "status": "error",
+            "message": error_msg
+        })
     
     # Resolve country name to code
     resolved_country = None
