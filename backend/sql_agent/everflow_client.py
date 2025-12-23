@@ -7,6 +7,7 @@ import requests
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 from dotenv import load_dotenv
+import logging
 
 # Load environment variables
 project_root = Path(__file__).parent.parent.parent
@@ -14,6 +15,9 @@ env_path = project_root / ".env"
 load_dotenv(dotenv_path=env_path)
 
 from .config import EVERFLOW_API_KEY, EVERFLOW_BASE_URL, EVERFLOW_TIMEZONE_ID
+from .everflow_api_validator import get_validator, ValidationResult
+
+logger = logging.getLogger(__name__)
 
 
 class EverflowClient:
@@ -28,8 +32,46 @@ class EverflowClient:
             "Content-Type": "application/json"
         }
     
+    def _validate_request(self, method: str, endpoint: str, data: Optional[Dict] = None) -> ValidationResult:
+        """
+        Validate API request before making it.
+        
+        Args:
+            method: HTTP method
+            endpoint: API endpoint path
+            data: Request payload
+        
+        Returns:
+            ValidationResult
+        """
+        validator = get_validator()
+        
+        # Validate endpoint
+        endpoint_result = validator.validate_endpoint(endpoint, method)
+        
+        if not endpoint_result.valid:
+            logger.warning(f"Endpoint validation failed: {endpoint_result.errors}")
+            return endpoint_result
+        
+        # Validate payload if provided
+        if data:
+            payload_result = validator.validate_payload(endpoint, data)
+            if not payload_result.valid:
+                logger.warning(f"Payload validation failed: {payload_result.errors}")
+                return payload_result
+            
+            # Combine results
+            return ValidationResult(
+                valid=payload_result.valid,
+                errors=endpoint_result.errors + payload_result.errors,
+                warnings=endpoint_result.warnings + payload_result.warnings,
+                suggestions=endpoint_result.suggestions + payload_result.suggestions
+            )
+        
+        return endpoint_result
+    
     def _request(self, method: str, endpoint: str, data: Optional[Dict] = None, params: Optional[Dict] = None) -> Dict:
-        """Make API request.
+        """Make API request with validation.
         
         Args:
             method: HTTP method (GET, POST, etc.)
@@ -37,6 +79,21 @@ class EverflowClient:
             data: JSON body data (for POST requests)
             params: Query parameters (for GET requests)
         """
+        # Validate request before making it
+        validation = self._validate_request(method, endpoint, data)
+        
+        if not validation.valid:
+            error_msg = "API Request Validation Failed:\n"
+            error_msg += "\n".join(f"  - {e}" for e in validation.errors)
+            if validation.suggestions:
+                error_msg += "\n\nSuggestions:\n"
+                error_msg += "\n".join(f"  - {s}" for s in validation.suggestions)
+            raise ValueError(error_msg)
+        
+        if validation.warnings:
+            for warning in validation.warnings:
+                logger.warning(f"API Request Warning: {warning}")
+        
         url = f"{self.base_url}{endpoint}"
         
         try:
@@ -50,17 +107,24 @@ class EverflowClient:
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
+            # Enhanced error handling with Context7 suggestions
             error_msg = f"API Error: {str(e)}"
-            if hasattr(e, 'response'):
+            if hasattr(e, 'response') and e.response is not None:
                 if hasattr(e.response, 'status_code'):
                     error_msg += f" (Status: {e.response.status_code})"
                 if hasattr(e.response, 'text'):
                     try:
                         error_json = e.response.json()
                         error_msg += f"\nAPI Error Details: {json.dumps(error_json, indent=2)}"
+                        
+                        # Try to get suggestions from validator
+                        validator = get_validator()
+                        suggestion = validator.get_endpoint_suggestion(f"error {e.response.status_code}")
+                        if suggestion:
+                            error_msg += f"\n\nSuggested endpoint: {suggestion}"
                     except:
                         error_msg += f"\nAPI Response: {e.response.text}"
-            print(error_msg)
+            logger.error(error_msg)
             raise Exception(error_msg) from e
     
     def get_affiliates(self, limit: Optional[int] = None) -> List[Dict]:
@@ -488,6 +552,7 @@ class EverflowClient:
     ) -> Dict:
         """
         Update the status of a conversion (approve/reject).
+        Uses endpoint discovery to find the correct endpoint.
         
         Args:
             conversion_id: The conversion ID
@@ -496,25 +561,48 @@ class EverflowClient:
         Returns:
             Success response
         """
-        # Try common endpoint patterns for updating conversion status
-        # This might need to be adjusted based on actual Everflow API
-        try:
-            # Pattern 1: PUT /v1/networks/conversions/{conversion_id}/status
-            endpoint = f"/v1/networks/conversions/{conversion_id}/status"
-            payload = {"status": status}
-            response = self._request("PUT", endpoint, data=payload)
-            return response
-        except Exception as e:
-            # Pattern 2: POST /v1/networks/conversions/{conversion_id}/update
+        validator = get_validator()
+        
+        # Try to discover the correct endpoint
+        suggestion = validator.get_endpoint_suggestion(f"update conversion {conversion_id} status {status}")
+        
+        # Known endpoint patterns to try
+        endpoints_to_try = [
+            f"/v1/networks/conversions/{conversion_id}/status",
+            f"/v1/networks/conversions/{conversion_id}",
+            "/v1/networks/conversions/bulk-status",
+        ]
+        
+        if suggestion:
+            endpoints_to_try.insert(0, suggestion)
+        
+        payload = {"status": status}
+        last_error = None
+        
+        for endpoint in endpoints_to_try:
             try:
-                endpoint = f"/v1/networks/conversions/{conversion_id}/update"
-                payload = {"status": status}
-                response = self._request("POST", endpoint, data=payload)
+                # Validate endpoint first
+                validation = validator.validate_endpoint(endpoint, "PUT")
+                if not validation.valid:
+                    # Try POST instead
+                    validation = validator.validate_endpoint(endpoint, "POST")
+                    method = "POST" if validation.valid else "PUT"
+                else:
+                    method = "PUT"
+                
+                response = self._request(method, endpoint, data=payload)
+                logger.info(f"Successfully updated conversion {conversion_id} using {endpoint}")
                 return response
-            except Exception as e2:
-                # Pattern 3: POST /v1/networks/conversions/bulk-status
-                # For bulk updates, we might need a different endpoint
-                raise Exception(f"Failed to update conversion status. Tried multiple endpoints. Last error: {str(e2)}")
+            except Exception as e:
+                logger.debug(f"Failed to update conversion using {endpoint}: {e}")
+                last_error = e
+                continue
+        
+        # If all endpoints failed, raise error
+        raise Exception(
+            f"Failed to update conversion status. Tried endpoints: {', '.join(endpoints_to_try)}. "
+            f"Last error: {str(last_error)}"
+        )
     
     def bulk_update_conversion_status(
         self,
