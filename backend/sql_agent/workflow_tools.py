@@ -909,9 +909,15 @@ def wf3_fetch_conversions(
         })
         
     except Exception as e:
+        import traceback
+        error_details = str(e)
+        traceback_str = traceback.format_exc()
+        print(f"❌ Error in wf3_fetch_conversions: {error_details}")
+        print(f"❌ Traceback: {traceback_str}")
         return json.dumps({
             "status": "error",
-            "message": f"Failed to fetch conversions: {str(e)}"
+            "message": f"Failed to fetch conversions: {error_details}",
+            "error_type": type(e).__name__
         })
 
 
