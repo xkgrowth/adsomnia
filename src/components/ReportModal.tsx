@@ -148,7 +148,7 @@ export default function ReportModal({
     }
   };
 
-  const renderRow = (row: ReportRow, level: number = 0): JSX.Element => {
+  const renderRow = (row: ReportRow, level: number = 0): React.ReactElement => {
     const hasChildren = row.children && row.children.length > 0;
     const isExpanded = expandedRows.has(row.id);
     const isSelected = selectedRows.has(row.id);
