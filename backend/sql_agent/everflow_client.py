@@ -442,13 +442,29 @@ class EverflowClient:
             "page_size": page_size
         }
         
-        # Try the conversions endpoint (without /export)
-        # If this doesn't exist, we might need to use the export endpoint and parse CSV
-        # For now, we'll try the standard endpoint
-        print(f"🔍 Calling Everflow API: POST /v1/networks/reporting/conversions")
+        # Use the entity reporting endpoint for viewing conversions
+        # The conversions/export endpoint is only for CSV exports
+        # For viewing, we use entity reporting with conversion-specific columns
+        print(f"🔍 Calling Everflow API: POST /v1/networks/reporting/entity")
         print(f"🔍 Payload: {json.dumps(payload, indent=2)}")
         try:
-            response = self._request("POST", "/v1/networks/reporting/conversions", payload)
+            # Convert columns to the format expected by entity reporting
+            # Entity reporting expects columns as objects: [{"column": "offer"}, {"column": "affiliate"}]
+            entity_columns = [{"column": col} for col in columns]
+            
+            # Update payload format for entity reporting
+            entity_payload = {
+                "columns": entity_columns,
+                "query": {"filters": filters},
+                "from": from_date,
+                "to": to_date,
+                "timezone_id": self.timezone_id,
+                "page": page,
+                "page_size": page_size
+            }
+            
+            print(f"🔍 Entity payload: {json.dumps(entity_payload, indent=2)}")
+            response = self._request("POST", "/v1/networks/reporting/entity", entity_payload)
             return response
         except Exception as e:
             # Extract detailed error information
