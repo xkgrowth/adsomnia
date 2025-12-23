@@ -349,6 +349,12 @@ class EntityResolver:
                         best_similarity = similarity
                         best_match = offer
             
+            # Debug: Print what we found
+            if best_match:
+                print(f"🔍 Best match found: Offer ID {best_match.get('offer_id')} = '{best_match.get('offer_name', '')}' (similarity: {best_similarity:.2%})")
+            else:
+                print(f"🔍 No best match found (best_similarity: {best_similarity:.2%})")
+            
             # If we found a good fuzzy match (similarity >= 0.85), use it automatically
             # Also auto-use perfect matches (100% similarity) even if return_suggestions=True
             if best_match and best_similarity >= 0.85:
@@ -363,6 +369,7 @@ class EntityResolver:
                 return offer_id
             
             # If no good match found, get suggestions for error message
+            # But first, check if suggestions contain a perfect match that we should auto-use
             if return_suggestions or best_similarity < 0.85:
                 suggestions = self._find_similar_entities(
                     search_name,
@@ -379,6 +386,17 @@ class EntityResolver:
                     }
                     for offer, sim in suggestions
                 ]
+                
+                # Check if suggestions contain a perfect match (100% similarity) that we should auto-use
+                perfect_match = next((s for s in suggestions_list if s.get("similarity", 0) >= 100.0), None)
+                if perfect_match:
+                    offer_id = perfect_match.get("offer_id")
+                    print(f"✅ Perfect match found in suggestions: Offer ID {offer_id} = '{perfect_match.get('offer_name')}' (100% match)")
+                    self._offer_cache[search_name] = offer_id
+                    if return_suggestions:
+                        return offer_id, []
+                    return offer_id
+                
                 if return_suggestions:
                     return None, suggestions_list
                 return None
