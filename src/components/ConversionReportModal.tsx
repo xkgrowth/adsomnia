@@ -249,11 +249,12 @@ export default function ConversionReportModal({
     return Array.from(columns);
   }, [data.conversions]);
 
-  // Priority columns to show first
+  // Priority columns matching Everflow default order for conversion reports
+  // Status | Date | Click Date | Sub1 | Offer | Partner | Delta | Payout | Conversion IP | Transaction ID | Adv1 | Adv2 | Conversion ID | Event Name
   const priorityColumns = [
     "status", "date", "click_date", "sub1", "offer", "partner",
     "delta", "payout", "conversion_ip", "transaction_id",
-    "offer_events", "adv1", "adv2", "conversion_id", "event_name"
+    "adv1", "adv2", "conversion_id", "event_name"
   ];
 
   const orderedColumns = [
@@ -385,7 +386,8 @@ export default function ConversionReportModal({
 
         {/* Table */}
         <div className="flex-1 overflow-auto">
-          <table className="w-full border-collapse">
+          <div className="overflow-x-auto min-w-full">
+            <table className="w-full border-collapse" style={{ minWidth: 'max-content' }}>
             <thead className="bg-bg-tertiary sticky top-0">
               <tr>
                 <th className="px-4 py-2 text-left border-b border-border">
@@ -400,7 +402,8 @@ export default function ConversionReportModal({
                   <th
                     key={column}
                     onClick={() => handleSort(column)}
-                    className="px-4 py-2 text-left text-xs font-semibold text-accent-yellow uppercase tracking-wide border-b border-border cursor-pointer hover:bg-bg-secondary transition-colors"
+                    className="px-4 py-2 text-left text-xs font-semibold text-accent-yellow uppercase tracking-wide border-b border-border cursor-pointer hover:bg-bg-secondary transition-colors whitespace-nowrap"
+                    style={{ minWidth: 'fit-content' }}
                   >
                     <div className="flex items-center gap-2">
                       {column.replace(/_/g, " ")}
@@ -460,9 +463,10 @@ export default function ConversionReportModal({
                         return (
                           <td
                             key={column}
-                            className={`px-4 py-2 text-sm text-text-primary ${
+                            className={`px-4 py-2 text-sm text-text-primary whitespace-nowrap ${
                               isNumber ? "text-right font-mono" : "text-left"
                             }`}
+                            style={{ minWidth: 'fit-content' }}
                           >
                             {value !== null && value !== undefined ? String(value) : "-"}
                           </td>
@@ -498,6 +502,7 @@ export default function ConversionReportModal({
               )}
             </tbody>
           </table>
+          </div>
         </div>
 
         {/* Footer */}

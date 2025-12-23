@@ -211,6 +211,7 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState<string>("");
   const [threadId, setThreadId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [affiliates, setAffiliates] = useState<Affiliate[]>(FALLBACK_AFFILIATES);
@@ -420,78 +421,171 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
            /report|table|data|export/i.test(content);
   };
 
-  const handleViewReport = async (message: Message) => {
-    // If we have report metadata with original query, fetch ALL records from the API
-    if (message.reportMetadata && 
-        message.reportMetadata.reportType === 'landing_pages' &&
-        message.reportMetadata.originalQuery) {
-      try {
-        setIsLoadingFullReport(true);
-        
-        // Make a new API call to get ALL landing pages (no top_n limit)
-        // Modify the query to explicitly request all results
-        const fullQuery = `${message.reportMetadata.originalQuery} - show all landing pages, no limit`;
+  // Unified handler for viewing full reports - workflow agnostic
+  const handleViewFullReport = async (message: Message) => {
+    try {
+      setIsLoadingFullReport(true);
+      
+      // Check if this is a conversion report (uses different modal)
+      if (message.conversionReportData || 
+          (message.reportMetadata && 
+           (message.reportMetadata.reportType?.includes('conversion') || 
+            message.reportMetadata.reportType?.includes('fraud')))) {
+        await handleViewConversionReport(message);
+        return;
+      }
+      
+      // For all other workflows (WF2, WF4, WF5, WF6, etc.)
+      // Re-fetch ALL records using the original query
+      if (message.reportMetadata && message.reportMetadata.originalQuery) {
+        // Modify query to request ALL records (no limits)
+        const fullQuery = `${message.reportMetadata.originalQuery} - show all records, no limit`;
         const fullReportResponse = await sendChatMessage(
           fullQuery,
           threadId || undefined
         );
         
         // Parse the full report data
-        const fullReportData = parseReportData(fullReportResponse.response);
+        const fullReportData = parseReportData(fullReportResponse.response, {
+          reportType: message.reportMetadata.reportType,
+          dateRange: message.reportMetadata.dateRange
+        });
+        
         if (fullReportData && fullReportData.rows.length > 0) {
-          // Use the full report data with all records
+          // Update metadata to preserve original query for future re-fetches
+          fullReportData.metadata = {
+            ...message.reportMetadata,
+            ...fullReportData.metadata
+          };
+          
           setCurrentReportData(fullReportData);
           setReportModalOpen(true);
           setIsLoadingFullReport(false);
           return;
         }
-      } catch (error) {
-        console.error('Error fetching full report:', error);
-        // Fall back to using the existing report data
-      } finally {
-        setIsLoadingFullReport(false);
       }
-    }
-    
-    // Fallback: use the existing report data
-    if (message.reportData) {
-      setCurrentReportData(message.reportData);
-      setReportModalOpen(true);
+      
+      // Fallback: use the existing report data (may be limited)
+      if (message.reportData) {
+        setCurrentReportData(message.reportData);
+        setReportModalOpen(true);
+      }
+    } catch (error) {
+      console.error('Error fetching full report:', error);
+      alert('Failed to load full report. Please try again.');
+    } finally {
+      setIsLoadingFullReport(false);
     }
   };
+  
+  // Keep handleViewReport for backward compatibility
+  const handleViewReport = handleViewFullReport;
 
   const handleViewConversionReport = async (message: Message) => {
-    // If we have conversion report data, show it
-    if (message.conversionReportData) {
-      setCurrentConversionReportData(message.conversionReportData);
-      setConversionReportModalOpen(true);
-      return;
-    }
-
-    // If we have metadata, try to fetch conversion data
-    if (message.reportMetadata && 
-        (message.reportMetadata.reportType === 'fraud' || message.reportMetadata.reportType === 'conversions') &&
-        message.reportMetadata.originalQuery) {
-      try {
-        setIsLoadingFullReport(true);
+    try {
+      setIsLoadingFullReport(true);
+      
+      // Always fetch ALL records for the full report, not just the preview
+      // Use the metadata to reconstruct the query with a large page_size
+      if (message.reportMetadata && 
+          (message.reportMetadata.reportType === 'wf3_fraud' || 
+           message.reportMetadata.reportType === 'wf3_conversions' ||
+           message.reportMetadata.reportType === 'fraud' || 
+           message.reportMetadata.reportType === 'conversions')) {
         
-        // Fetch conversion data using the API
+        // Determine report type
+        const reportType = message.reportMetadata.reportType.includes('fraud') ? 'fraud' : 'conversions';
+        
+        // Fetch ALL records with maximum page size
+        // The API supports up to 2000 records per page according to Everflow docs
         const conversionData = await fetchConversions({
-          report_type: message.reportMetadata.reportType as "fraud" | "conversions",
+          report_type: reportType,
           date_range: message.reportMetadata.dateRange || "last 30 days",
-          filters: message.reportMetadata.filters,
+          filters: message.reportMetadata.filters || message.conversionReportData?.filters,
           page: 1,
-          page_size: 50
+          page_size: 2000  // Fetch maximum records per page
         });
         
-        setCurrentConversionReportData(conversionData);
+        // If there are more pages, fetch them all
+        let allConversions = [...conversionData.conversions];
+        let currentPage = 1;
+        const totalPages = conversionData.pagination.total_pages;
+        
+        // Fetch remaining pages if needed
+        while (currentPage < totalPages && currentPage < 10) { // Limit to 10 pages to prevent excessive requests
+          currentPage++;
+          const pageData = await fetchConversions({
+            report_type: reportType,
+            date_range: message.reportMetadata.dateRange || "last 30 days",
+            filters: message.reportMetadata.filters || message.conversionReportData?.filters,
+            page: currentPage,
+            page_size: 2000
+          });
+          allConversions = [...allConversions, ...pageData.conversions];
+        }
+        
+        // Update the conversion data with all records
+        const fullConversionData: ConversionReportData = {
+          ...conversionData,
+          conversions: allConversions,
+          pagination: {
+            ...conversionData.pagination,
+            page: 1,
+            total_pages: 1  // We've combined all pages
+          }
+        };
+        
+        setCurrentConversionReportData(fullConversionData);
         setConversionReportModalOpen(true);
-      } catch (error) {
-        console.error('Error fetching conversion report:', error);
-        alert('Failed to load conversion report. Please try again.');
-      } finally {
-        setIsLoadingFullReport(false);
+      } else if (message.conversionReportData) {
+        // If we have conversion report data but need to fetch all records
+        // Use the existing data to fetch all pages
+        const reportType = message.conversionReportData.report_type === 'fraud' ? 'fraud' : 'conversions';
+        
+        // Fetch ALL records
+        const conversionData = await fetchConversions({
+          report_type: reportType,
+          date_range: message.conversionReportData.date_range,
+          filters: message.conversionReportData.filters,
+          page: 1,
+          page_size: 2000
+        });
+        
+        // Fetch remaining pages if needed
+        let allConversions = [...conversionData.conversions];
+        let currentPage = 1;
+        const totalPages = conversionData.pagination.total_pages;
+        
+        while (currentPage < totalPages && currentPage < 10) {
+          currentPage++;
+          const pageData = await fetchConversions({
+            report_type: reportType,
+            date_range: message.conversionReportData.date_range,
+            filters: message.conversionReportData.filters,
+            page: currentPage,
+            page_size: 2000
+          });
+          allConversions = [...allConversions, ...pageData.conversions];
+        }
+        
+        const fullConversionData: ConversionReportData = {
+          ...conversionData,
+          conversions: allConversions,
+          pagination: {
+            ...conversionData.pagination,
+            page: 1,
+            total_pages: 1
+          }
+        };
+        
+        setCurrentConversionReportData(fullConversionData);
+        setConversionReportModalOpen(true);
       }
+    } catch (error) {
+      console.error('Error fetching full conversion report:', error);
+      alert('Failed to load full conversion report. Please try again.');
+    } finally {
+      setIsLoadingFullReport(false);
     }
   };
 
@@ -613,13 +707,74 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
+    setLoadingProgress("Analyzing your query...");
     setError(null);
+
+    // Declare progressTimers outside try block so it's accessible in finally
+    const progressTimers: NodeJS.Timeout[] = [];
 
     try {
       console.log('submitMessage: Calling API', { message: userMessage.content, threadId });
+      
+      // Update progress based on query type with progressive updates
+      const queryLower = userMessage.content.toLowerCase();
+      
+      // Set initial progress
+      setLoadingProgress("Analyzing your query...");
+      
+      // Progressive progress updates based on elapsed time
+      
+      const progressStages = queryLower.includes('conversion') || queryLower.includes('fraud') 
+        ? [
+            { time: 500, message: "Understanding your request..." },
+            { time: 1500, message: "Identifying conversion report parameters..." },
+            { time: 2500, message: "Preparing Everflow API call..." },
+            { time: 4000, message: "Fetching conversion data from Everflow..." },
+            { time: 8000, message: "Processing conversion records..." },
+            { time: 12000, message: "Calculating summary statistics..." },
+            { time: 15000, message: "Formatting report table..." },
+          ]
+        : queryLower.includes('landing page') || queryLower.includes('top')
+        ? [
+            { time: 500, message: "Understanding your request..." },
+            { time: 1500, message: "Analyzing landing page performance..." },
+            { time: 4000, message: "Fetching data from Everflow..." },
+            { time: 8000, message: "Calculating metrics..." },
+            { time: 12000, message: "Formatting results..." },
+          ]
+        : queryLower.includes('export') || queryLower.includes('download')
+        ? [
+            { time: 500, message: "Understanding your request..." },
+            { time: 2000, message: "Preparing export..." },
+            { time: 5000, message: "Generating report..." },
+            { time: 10000, message: "Finalizing export..." },
+          ]
+        : [
+            { time: 500, message: "Understanding your request..." },
+            { time: 2000, message: "Processing your query..." },
+            { time: 5000, message: "Fetching data..." },
+            { time: 10000, message: "Formatting response..." },
+          ];
+      
+      // Set up progressive updates
+      progressStages.forEach((stage) => {
+        const timer = setTimeout(() => {
+          setLoadingProgress(stage.message);
+        }, stage.time);
+        progressTimers.push(timer);
+      });
+      
       // Call the API
       const response = await sendChatMessage(userMessage.content, threadId || undefined);
+      
+      // Final progress update
+      setLoadingProgress("Finalizing response...");
       console.log('submitMessage: API response received', { response });
+      
+      // Validate response is not empty
+      if (!response || !response.response || response.response.trim().length === 0) {
+        throw new Error("Received empty response from server. Please try again.");
+      }
       
       // Update thread ID if provided
       if (response.thread_id) {
@@ -671,7 +826,7 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
         // Not a conversion report, continue
       }
 
-      // Store the original user query for fetching full reports
+      // Store comprehensive metadata for workflow-agnostic full report fetching
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
@@ -683,7 +838,9 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
           reportType: reportType,
           dateRange: dateRange,
           originalQuery: messageContent.trim(), // Store original query for full report fetch
-          filters: conversionReportData?.filters,
+          filters: conversionReportData?.filters || reportData?.metadata?.filters,
+          // Store any additional metadata from the report data
+          ...(reportData?.metadata || {}),
         } : undefined,
       };
       
@@ -702,7 +859,10 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
       
       setMessages((prev) => [...prev, errorResponse]);
     } finally {
+      // Clear all progress timers
+      progressTimers.forEach(timer => clearTimeout(timer));
       setIsLoading(false);
+      setLoadingProgress("");
       console.log('submitMessage: Finished');
     }
   };
@@ -781,8 +941,13 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
           return cells;
         });
         
+        // Limit preview to 10 rows max
+        const previewRows = parsedRows.slice(0, 10);
+        const hasMoreRows = parsedRows.length > 10;
+        const totalRows = parsedRows.length;
+        
         // Sort rows if default sort column is found
-        let sortedRows = parsedRows;
+        let sortedRows = previewRows;
         if (defaultSort) {
           const sortColIndex = columns.findIndex(
             col => col.toLowerCase() === defaultSort.column
@@ -822,13 +987,14 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
         
         parts.push(
           <div key={`table-${matchIndex}`} className="my-4 overflow-x-auto">
-            <table className="w-full border-collapse border border-border rounded-lg overflow-hidden">
+            <table className="border-collapse border border-border rounded-lg overflow-hidden" style={{ minWidth: 'max-content', width: '100%' }}>
               <thead>
                 <tr className="bg-bg-tertiary border-b border-border">
                   {columns.map((col, colIndex) => (
                     <th
                       key={colIndex}
-                      className="px-4 py-2 text-left text-xs font-semibold text-accent-yellow uppercase tracking-wide border-r border-border last:border-r-0"
+                      className="px-4 py-2 text-left text-xs font-semibold text-accent-yellow uppercase tracking-wide border-r border-border last:border-r-0 whitespace-nowrap"
+                      style={{ minWidth: 'fit-content' }}
                     >
                       {col.trim()}
                     </th>
@@ -849,9 +1015,10 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
                         return (
                           <td
                             key={colIndex}
-                            className={`px-4 py-2 text-sm text-text-primary border-r border-border last:border-r-0 ${
+                            className={`px-4 py-2 text-sm text-text-primary border-r border-border last:border-r-0 whitespace-nowrap ${
                               isNumber ? 'text-right font-mono' : 'text-left'
                             }`}
+                            style={{ minWidth: 'fit-content' }}
                           >
                             {cellContent}
                           </td>
@@ -862,6 +1029,11 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
                 })}
               </tbody>
             </table>
+            {hasMoreRows && (
+              <div className="mt-2 text-xs text-text-muted italic text-center">
+                Showing {previewRows.length} of {totalRows} records. Click "View Full Report" to see all records with all columns.
+              </div>
+            )}
           </div>
         );
         
@@ -980,11 +1152,12 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
                   <div className="text-sm leading-relaxed text-text-primary whitespace-pre-wrap">
                     {formatContent(message.content)}
                   </div>
-                  {/* View Full Report Button */}
-                  {message.reportData && (
+                  {/* View Full Report Button - Workflow Agnostic */}
+                  {(message.reportData || message.conversionReportData || 
+                    (message.reportMetadata && message.reportMetadata.originalQuery)) && (
                     <div className="mt-3">
                       <button
-                        onClick={() => handleViewReport(message)}
+                        onClick={() => handleViewFullReport(message)}
                         disabled={isLoadingFullReport}
                         className="btn-primary px-4 py-2 text-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                       >
@@ -995,45 +1168,6 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
                           </>
                         ) : (
                           'View Full Report'
-                        )}
-                      </button>
-                    </div>
-                  )}
-                  {/* View Conversion Report Button */}
-                  {message.conversionReportData && (
-                    <div className="mt-3">
-                      <button
-                        onClick={() => handleViewConversionReport(message)}
-                        disabled={isLoadingFullReport}
-                        className="btn-primary px-4 py-2 text-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                      >
-                        {isLoadingFullReport ? (
-                          <>
-                            <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                            Loading...
-                          </>
-                        ) : (
-                          'View Conversion Report'
-                        )}
-                      </button>
-                    </div>
-                  )}
-                  {/* View Conversion Report Button (from metadata) */}
-                  {!message.conversionReportData && message.reportMetadata && 
-                   (message.reportMetadata.reportType === 'fraud' || message.reportMetadata.reportType === 'conversions') && (
-                    <div className="mt-3">
-                      <button
-                        onClick={() => handleViewConversionReport(message)}
-                        disabled={isLoadingFullReport}
-                        className="btn-primary px-4 py-2 text-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                      >
-                        {isLoadingFullReport ? (
-                          <>
-                            <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                            Loading...
-                          </>
-                        ) : (
-                          'View Conversion Report'
                         )}
                       </button>
                     </div>
@@ -1062,7 +1196,7 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
           </div>
         ))}
 
-        {/* Typing indicator */}
+        {/* Progress indicator */}
         {isLoading && (
           <div className="flex justify-start message-enter">
             <div className="max-w-[85%]">
@@ -1072,10 +1206,17 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
                 </span>
               </div>
               <div className="border-l-2 border-accent-yellow pl-4">
-                <div className="flex gap-1.5 py-2">
-                  <span className="typing-dot h-2 w-2 bg-accent-yellow" />
-                  <span className="typing-dot h-2 w-2 bg-accent-yellow" />
-                  <span className="typing-dot h-2 w-2 bg-accent-yellow" />
+                <div className="flex items-center gap-3 py-2">
+                  <div className="flex gap-1.5">
+                    <span className="typing-dot h-2 w-2 bg-accent-yellow" />
+                    <span className="typing-dot h-2 w-2 bg-accent-yellow" />
+                    <span className="typing-dot h-2 w-2 bg-accent-yellow" />
+                  </div>
+                  {loadingProgress && (
+                    <span className="text-xs text-text-muted font-mono">
+                      {loadingProgress}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

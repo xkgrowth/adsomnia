@@ -43,12 +43,12 @@ export async function sendChatMessage(
       hasApiKey: !!API_KEY,
     });
     
-    // Add timeout to fetch request (60 seconds for LLM calls)
+    // Add timeout to fetch request (90 seconds - should be fast with pre-formatted responses)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
-      console.error('sendChatMessage: Request timeout after 60 seconds');
+      console.error('sendChatMessage: Request timeout after 90 seconds');
       controller.abort();
-    }, 60000); // 60 second timeout
+    }, 90000); // 90 second timeout
     
     let response;
     try {

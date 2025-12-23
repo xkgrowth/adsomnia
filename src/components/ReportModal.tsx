@@ -189,7 +189,8 @@ export default function ReportModal({
           {data.columns.map((column) => (
             <div
               key={column}
-              className="flex-1 text-sm text-text-primary min-w-[120px]"
+              className="flex-1 text-sm text-text-primary min-w-[120px] whitespace-nowrap"
+              style={{ minWidth: 'fit-content' }}
             >
               {row[column] !== undefined && row[column] !== null
                 ? String(row[column])
@@ -259,7 +260,7 @@ export default function ReportModal({
 
         {/* Table */}
         <div className="flex-1 overflow-auto">
-          <div className="w-full">
+          <div className="w-full overflow-x-auto min-w-full">
             {/* Table Header */}
             <div className="sticky top-0 bg-bg-tertiary border-b border-border z-10">
               <div className="flex items-center gap-2 py-2 px-3">
@@ -276,7 +277,8 @@ export default function ReportModal({
                   <button
                     key={column}
                     onClick={() => handleSort(column)}
-                    className="flex-1 text-left text-xs font-semibold text-accent-yellow uppercase tracking-wide min-w-[120px] hover:text-accent-yellow/80"
+                    className="flex-1 text-left text-xs font-semibold text-accent-yellow uppercase tracking-wide min-w-[120px] hover:text-accent-yellow/80 whitespace-nowrap"
+                    style={{ minWidth: 'fit-content' }}
                   >
                     <div className="flex items-center gap-1">
                       {column}

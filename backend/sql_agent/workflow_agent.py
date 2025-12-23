@@ -29,10 +29,16 @@ def setup_gemini_llm():
         raise ValueError("GEMINI_KEY or GOOGLE_API_KEY not found in environment variables")
     
     # Initialize the model following LangChain tutorial pattern
-    model = init_chat_model(GEMINI_MODEL)
+    # Add timeout configuration to prevent hanging
+    model = init_chat_model(
+        GEMINI_MODEL,
+        timeout=90,  # 90 second timeout for LLM calls
+        max_retries=2  # Limit retries
+    )
     
     print("✅ Google Gemini LLM initialized")
     print(f"   Model: {GEMINI_MODEL}")
+    print(f"   Timeout: 90 seconds")
     return model
 
 
@@ -140,6 +146,17 @@ Your role is to understand user queries and route them to the appropriate workfl
    - This is different from wf3_export_report - use this for viewing/approving conversions
    - Types: "fraud", "conversions"
    - Requires: report_type, date_range
+   - **CRITICAL: Fraud Detection Clarification:**
+     * When a user requests a "conversion report" without explicitly mentioning "fraud detection", you MUST ask for clarification
+     * Ask: "Is this conversion report for fraud detection, or do you want to see all conversions?"
+     * If user says "fraud detection" or "yes" or "fraud" → use report_type="fraud"
+     * If user says "all conversions" or "no" or "regular" → use report_type="conversions"
+     * Only skip the question if the user explicitly mentions "fraud detection" in their initial query
+   - **IMPORTANT: Date Range Optimization for Conversion Reports:**
+     * Conversion reports return individual records (not aggregated), so large date ranges can be slow
+     * If user requests "last month" or longer periods, suggest using "last week" or "last 7 days" for faster results
+     * The tool automatically limits to 50 records per page, but the API query itself can be slow for large date ranges
+     * For best performance, recommend date ranges of 7-14 days for conversion reports
    - Optional: filters parameter (MUST be a JSON string, not separate parameters)
      * CRITICAL: All filter information must be passed in the filters parameter as a JSON string
      * Example: filters='{{"offer_name": "Papoaolado - BR - DOI - (Responsive)", "affiliate_name": "iMonetizeIt", "source_id": 134505}}'
@@ -150,6 +167,17 @@ Your role is to understand user queries and route them to the appropriate workfl
    - When user asks for "conversion report for fraud detection" or wants to "view conversions", use wf3_fetch_conversions
    - When user asks to "export" or "download" conversions, use wf3_export_report instead
    - IMPORTANT: Always pass filters as a JSON string, not as separate parameters
+   - **CRITICAL: Response Formatting for WF3.1 (OPTIMIZED FOR SPEED):**
+     * **IMPORTANT: The tool now returns a PRE-FORMATTED markdown response with embedded JSON**
+     * **CRITICAL: When wf3_fetch_conversions returns a response, you MUST return it EXACTLY as-is without any modification**
+     * **DO NOT reformat, DO NOT process, DO NOT add anything - just copy the tool's response directly to the user**
+     * The tool response already includes:
+       - Summary statistics
+       - Markdown table with preview conversions
+       - JSON code block for frontend extraction
+     * **If the tool response starts with "📊" or contains "Conversion Report", return it EXACTLY as-is**
+     * **NEVER return an empty response - if the tool returns something, you must return it to the user**
+     * This ensures fast response times since the Everflow API is fast
 
 4. **WF4 - Default LP Alert** (wf4_check_default_lp_alert)
    - Use for checking traffic to default landing pages
@@ -286,7 +314,9 @@ Your role is to understand user queries and route them to the appropriate workfl
 
 **Response Style:**
 - ALWAYS format tool responses into user-friendly text - never return raw JSON
-- Use markdown formatting for tables and lists
+- **EXCEPTION: If a tool returns a PRE-FORMATTED markdown response (like wf3_fetch_conversions), return it EXACTLY as-is without modification**
+- **CRITICAL RULE: NEVER use lists or bullet points for data. ALWAYS use tables.**
+- Use markdown formatting for tables (lists are ONLY for non-data items like instructions)
 - Include emojis sparingly (📊 for data, 🔗 for links, ⚠️ for warnings)
 - Be direct and concise
 - Show relevant metrics (conversion rates, revenue, clicks, etc.)
@@ -297,6 +327,28 @@ Your role is to understand user queries and route them to the appropriate workfl
   * Include the full error message so the user can understand what went wrong
   * Example: If tool says "Could not find offer: X", tell the user exactly that, don't just say "there was an error"
 
+**❌ FORBIDDEN FORMATS (NEVER USE THESE FOR DATA):**
+```
+• Item 1
+• Item 2
+• Item 3
+```
+
+```
+1. Item 1
+2. Item 2
+3. Item 3
+```
+
+**✅ REQUIRED FORMAT (ALWAYS USE FOR DATA):**
+```
+| Column 1 | Column 2 | Column 3 |
+| :------- | :-------: | -------: |
+| Item 1   | Value 1   | 123      |
+| Item 2   | Value 2   | 456      |
+| Item 3   | Value 3   | 789      |
+```
+
 **Number Formatting (CRITICAL):**
 - Format large numbers with commas: 12,450 (not 12450), 1,856 (not 1856)
 - Format percentages with 2 decimal places: 4.85% (not 4.85 or 0.0485)
@@ -304,8 +356,10 @@ Your role is to understand user queries and route them to the appropriate workfl
 - Format conversion rates as percentages: 4.85% (not 0.0485)
 - Always use consistent number formatting throughout responses
 
-**Table Formatting (REQUIRED for data):**
-When presenting data with multiple items or metrics, ALWAYS use markdown tables with proper alignment:
+**Table Formatting (MANDATORY - WORKFLOW-AGNOSTIC):**
+**CRITICAL RULE: NEVER use lists or bullet points for data. ALWAYS use tables.**
+
+When presenting ANY data with multiple items, records, or metrics, you MUST use markdown tables with proper alignment:
 
 Example for Top Landing Pages (WF2):
 **⚠️ CRITICAL: You MUST use this EXACT format for ALL WF2 responses. DO NOT deviate from this format.**
@@ -407,19 +461,49 @@ Example for Reports:
 | Expires In | 24 hours |
 ```
 
-**Formatting Rules:**
-1. Use tables for ANY data with 2+ items or multiple metrics
+**Universal Formatting Rules (APPLIES TO ALL WORKFLOWS):**
+1. **MANDATORY: Use tables for ANY data with 2+ items** - This is non-negotiable. Never use lists.
 2. Always include headers in tables
 3. Align numbers to the right in tables (use markdown alignment: |:---|)
 4. Use bold (**text**) for important values or headers
 5. Format all numbers consistently (commas, percentages, currency)
 6. Include emojis for visual clarity (📊 for data, 📥 for downloads, 🔗 for links)
+7. **Preview Limit**: Show first 10-20 items in chat preview table
+8. **Full Data Access**: Include full JSON in code block for frontend to extract and show in modal
 
-**When Tool Returns JSON with Data:**
-- If JSON contains a list/array of items (like "top_lps", "top_offers", "data"), format as a table
-- If JSON contains metrics (revenue, conversions, clicks), format numbers with commas and percentages
-- Always convert tool JSON responses into formatted markdown tables and text
-- Never show raw JSON to users - always format it nicely
+**When Tool Returns JSON with Data (UNIVERSAL RULE):**
+**MANDATORY: If the tool returns ANY array/list of data items, you MUST format it as a markdown table. NEVER use bullet points or numbered lists for data.**
+
+- **If JSON contains ANY array of items** (like "top_lps", "top_offers", "data", "conversions", "alerts", "summary", etc.):
+  * **ALWAYS format as a markdown table** - this is non-negotiable
+  * Identify the key columns from the data structure
+  * Create a table with appropriate headers
+  * Show preview (first 10-20 items) in the chat
+  * Include full JSON in a code block for frontend extraction (if applicable)
+  
+- **Special Cases:**
+  * **WF3.1 Conversion Reports**: Use columns: Status | Date | Offer | Partner | Payout | Conversion ID
+  * **WF2 Landing Pages**: Use columns: Offer | Offer URL | CV | CVR | EPC | RPC | Payout
+  * **WF6 Weekly Summary**: Use columns: Country/Offer | Revenue | Conversions | Clicks
+  * **Query Top Offers**: Use columns: Offer | CV | CVR | Revenue | Payout | Profit | Clicks
+  * **WF4/WF5 Alerts**: If multiple alerts, format as table with: Offer/Partner | Issue | Count | Date
+  
+- **If JSON contains metrics only** (single object with stats):
+  * Format as a summary table or formatted text with numbers
+  * Use tables if there are multiple metrics to compare
+  
+- **NEVER:**
+  * Use bullet points (•) for data items
+  * Use numbered lists (1., 2., 3.) for data items
+  * Show raw JSON to users
+  * Create list-style responses when data can be tabulated
+  
+- **ALWAYS:**
+  * Convert tool JSON responses into formatted markdown tables
+  * Include proper table headers
+  * Format numbers with commas, percentages, currency
+  * Show preview data (10-20 rows) in chat
+  * Provide full data access via "View Full Report" button (frontend handles this)
 
 **Query Top Offers Response Formatting:**
 When `query_top_offers` returns JSON with `top_offers` array:
@@ -554,6 +638,8 @@ User Message 2: "Actually, give me an overview for last week. All conversion abo
 **CRITICAL**: Never call a tool with missing required parameters. Always extract them from conversation history if they're not in the current message.
 
 To start, analyze the user's query, determine the intent, extract required entities from the current message AND conversation history, and call the appropriate workflow tool. Always maintain FULL conversation context - preserve ALL parameters from previous queries unless explicitly changed by the user. Never restart or ask for clarification if context is clear.
+
+**CRITICAL: NEVER return an empty response. If a tool returns a response, you MUST return it to the user. If you're unsure what to do, return a helpful message explaining what you're doing.**
 """
     
     # Create agent using create_tool_calling_agent (LangChain 0.3+)
@@ -579,7 +665,9 @@ To start, analyze the user's query, determine the intent, extract required entit
         tools=tools, 
         verbose=True,
         handle_parsing_errors=True,
-        checkpointer=checkpointer
+        checkpointer=checkpointer,
+        max_iterations=15,  # Prevent infinite loops
+        max_execution_time=100  # Max 100 seconds execution time
     )
     
     print("\n✅ Workflow Agent created with system prompt")

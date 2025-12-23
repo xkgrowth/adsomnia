@@ -747,6 +747,12 @@ def wf3_fetch_conversions(
     page_size: int = 50
 ) -> str:
     """
+    Fetch conversion data for viewing (not exporting). Use this when users want to VIEW conversion reports, especially for fraud detection.
+    
+    This tool returns a PRE-FORMATTED markdown response that should be passed through directly to the user without modification.
+    """
+    print(f"🔍 wf3_fetch_conversions called with: report_type={report_type}, date_range={date_range}, filters={filters}, page={page}, page_size={page_size}")
+    """
     Fetch conversion data for viewing (not exporting).
     Use this when the user wants to VIEW conversion data, especially for fraud detection.
     For exporting to CSV, use wf3_export_report instead.
@@ -799,7 +805,6 @@ def wf3_fetch_conversions(
         "this month": (today.replace(day=1), today),
         "last 7 days": (today - timedelta(days=7), today),
         "last 30 days": (today - timedelta(days=30), today),
-        "last month": (today - timedelta(days=30), today),  # Approximate
     }
     
     # Check for "year to date"
@@ -850,11 +855,16 @@ def wf3_fetch_conversions(
     
     # Default columns for conversion reports
     # These columns are available in the conversions/export endpoint
+    # Matching Everflow table columns: Status | Date | Click Date | Sub1 | Offer | Partner | Delta | Payout | Conversion IP | Transaction ID | Adv1 | Adv2 | Conversion ID | Event Name
     default_columns = [
         "conversion_id", "click_id", "status", "date", "click_date",
-        "sub1", "affiliate", "offer", "payout", "revenue",
-        "conversion_ip", "transaction_id", "is_fraud", "fraud_reason"
+        "sub1", "affiliate", "partner", "offer", "delta", "payout", "revenue",
+        "conversion_ip", "transaction_id", "adv1", "adv2", "event_name",
+        "is_fraud", "fraud_reason", "offer_events"
     ]
+    
+    # Note: source_id filter significantly narrows results, so month-long queries should be fine
+    # The API is optimized when proper filters (offer, affiliate, source_id) are provided
     
     try:
         from .everflow_client import EverflowClient
@@ -869,22 +879,153 @@ def wf3_fetch_conversions(
         print(f"   api_filters: {json.dumps(api_filters, indent=2)}")
         print(f"   page: {page}, page_size: {page_size}")
         
-        # Fetch conversions
-        response = client.fetch_conversions(
-            columns=default_columns,
-            filters=api_filters,
-            from_date=from_date_str,
-            to_date=to_date_str,
-            page=page,
-            page_size=page_size
-        )
+        # Verify source_id is in filters (critical for performance)
+        has_source_filter = any(f.get("resource_type") == "source" for f in api_filters)
+        if has_source_filter:
+            source_filter = next((f for f in api_filters if f.get("resource_type") == "source"), None)
+            print(f"✅ Source ID filter active: {source_filter.get('filter_id_value') if source_filter else 'N/A'}")
+        else:
+            print(f"⚠️  No source_id filter - query may be slower")
+        
+        # Fetch conversions with timeout handling
+        import time
+        start_time = time.time()
+        print(f"⏱️  Starting API call (timeout: 30 seconds)...")
+        try:
+            response = client.fetch_conversions(
+                columns=default_columns,
+                filters=api_filters,
+                from_date=from_date_str,
+                to_date=to_date_str,
+                page=page,
+                page_size=page_size
+            )
+            elapsed = time.time() - start_time
+            print(f"✅ API call completed in {elapsed:.2f} seconds")
+        except Exception as api_error:
+            error_msg = str(api_error)
+            if "timeout" in error_msg.lower() or "timed out" in error_msg.lower():
+                return json.dumps({
+                    "status": "error",
+                    "message": f"The query timed out. The date range '{date_range}' may be too large or return too much data. Try a shorter date range (e.g., 'last week' or 'last 7 days') or add more filters to narrow the results.",
+                    "error_type": "timeout"
+                })
+            raise  # Re-raise if not a timeout
         
         # Process response to extract summary statistics
-        conversions = response.get("table", []) or response.get("conversions", [])
+        raw_conversions = response.get("table", []) or response.get("conversions", [])
         paging = response.get("paging", {})
         
+        print(f"📊 Processing {len(raw_conversions)} conversions...")
+        print(f"📊 Total count from API: {paging.get('total_count', len(raw_conversions))}")
+        
+        # Log if source_id filter is working (should significantly reduce results)
+        if has_source_filter and len(raw_conversions) > 0:
+            print(f"✅ Source ID filter working - returned {len(raw_conversions)} conversions")
+        
+        # Filter for fraud conversions if report_type is "fraud"
+        # Apply client-side filtering since API filter might not work correctly
+        original_count = len(raw_conversions)
+        if report_type.lower() == "fraud":
+            raw_conversions = [conv for conv in raw_conversions if conv.get("is_fraud") == True]
+            print(f"🔍 Fraud filter applied: {len(raw_conversions)} fraud conversions (from {original_count} total)")
+            if len(raw_conversions) == 0 and original_count > 0:
+                print(f"⚠️  Warning: No fraud conversions found in {original_count} total conversions")
+        
+        # Process and normalize all conversion records with ALL fields
+        # Extract nested relationship data and flatten it for easier frontend access
+        conversions = []
+        for conv in raw_conversions:
+            # Extract offer name from various locations
+            offer_name = None
+            if conv.get("offer"):
+                offer_name = conv.get("offer")
+            elif conv.get("relationship", {}).get("offer", {}).get("name"):
+                offer_name = conv.get("relationship", {}).get("offer", {}).get("name")
+            
+            # Extract affiliate/partner name from various locations
+            partner_name = None
+            if conv.get("partner"):
+                partner_name = conv.get("partner")
+            elif conv.get("affiliate"):
+                partner_name = conv.get("affiliate")
+            elif conv.get("relationship", {}).get("affiliate", {}).get("name"):
+                partner_name = conv.get("relationship", {}).get("affiliate", {}).get("name")
+            
+            # Format dates
+            date_str = None
+            if conv.get("date"):
+                date_str = conv.get("date")
+            elif conv.get("conversion_unix_timestamp"):
+                from datetime import datetime
+                try:
+                    ts = int(conv.get("conversion_unix_timestamp"))
+                    date_str = datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+                except:
+                    pass
+            
+            click_date_str = None
+            if conv.get("click_date"):
+                click_date_str = conv.get("click_date")
+            elif conv.get("click_unix_timestamp"):
+                from datetime import datetime
+                try:
+                    ts = int(conv.get("click_unix_timestamp"))
+                    click_date_str = datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+                except:
+                    pass
+            
+            # Build normalized conversion record with ALL fields
+            normalized_conv = {
+                "conversion_id": conv.get("conversion_id"),
+                "click_id": conv.get("click_id"),
+                "status": conv.get("status"),
+                "date": date_str or conv.get("date"),
+                "click_date": click_date_str or conv.get("click_date"),
+                "sub1": conv.get("sub1"),
+                "sub2": conv.get("sub2"),
+                "sub3": conv.get("sub3"),
+                "sub4": conv.get("sub4"),
+                "sub5": conv.get("sub5"),
+                "offer": offer_name or conv.get("offer"),
+                "partner": partner_name or conv.get("partner") or conv.get("affiliate"),
+                "affiliate": partner_name or conv.get("affiliate"),
+                "delta": conv.get("delta"),
+                "payout": conv.get("payout"),
+                "revenue": conv.get("revenue"),
+                "conversion_ip": conv.get("conversion_user_ip") or conv.get("conversion_ip") or conv.get("session_user_ip"),
+                "transaction_id": conv.get("transaction_id"),
+                "adv1": conv.get("adv1"),
+                "adv2": conv.get("adv2"),
+                "adv3": conv.get("adv3"),
+                "adv4": conv.get("adv4"),
+                "adv5": conv.get("adv5"),
+                "event_name": conv.get("event") or conv.get("event_name"),
+                "offer_events": conv.get("offer_events"),
+                "is_fraud": conv.get("is_fraud"),
+                "fraud_reason": conv.get("fraud_reason"),
+                # Include all other fields from the API response
+                **{k: v for k, v in conv.items() if k not in [
+                    "relationship", "offer", "affiliate", "partner", 
+                    "date", "click_date", "conversion_unix_timestamp", "click_unix_timestamp",
+                    "conversion_user_ip", "session_user_ip", "event"
+                ]}
+            }
+            conversions.append(normalized_conv)
+        
         # Calculate summary statistics
-        total = len(conversions)
+        # For fraud reports, use actual filtered count (not API total_count which includes all conversions)
+        # For regular reports, use API total_count if available (may be paginated)
+        if report_type.lower() == "fraud":
+            # Fraud reports are filtered client-side, so use actual filtered count
+            total = len(conversions)
+            print(f"📊 Summary: Using filtered count ({total}) for fraud report")
+        else:
+            # Regular reports: use API total_count if available, otherwise count current page
+            total = paging.get("total_count", len(conversions))
+            if total != len(conversions) and len(conversions) < total:
+                print(f"📊 Summary: Using API total_count ({total}), current page has {len(conversions)} records")
+        
         status_counts = {}
         total_payout = 0
         total_revenue = 0
@@ -914,21 +1055,148 @@ def wf3_fetch_conversions(
             "gross_sales": round(total_gross_sales, 2)
         }
         
-        return json.dumps({
-            "status": "success",
-            "report_type": report_type,
-            "date_range": f"{from_date_str} to {to_date_str}",
-            "summary": summary,
-            "conversions": conversions,
-            "pagination": {
+        # Format conversions for table display
+        # Preview columns (key columns for chat preview): Status, Date, Offer, Partner, Payout, Conversion ID
+        # Full columns (all columns for modal): Status, Date, Click Date, Sub1, Offer, Partner, Delta, Payout, Conversion IP, Transaction ID, Adv1, Adv2, Conversion ID, Event Name
+        
+        # Prepare preview data (first 10 records) - only include essential fields for preview
+        preview_conversions = []
+        if conversions:
+            for conv in conversions[:10]:
+                # Extract offer name from various possible locations
+                offer_name = None
+                if conv.get("offer"):
+                    offer_name = conv.get("offer")
+                elif conv.get("relationship", {}).get("offer", {}).get("name"):
+                    offer_name = conv.get("relationship", {}).get("offer", {}).get("name")
+                
+                # Extract affiliate/partner name from various possible locations
+                partner_name = None
+                if conv.get("partner"):
+                    partner_name = conv.get("partner")
+                elif conv.get("affiliate"):
+                    partner_name = conv.get("affiliate")
+                elif conv.get("relationship", {}).get("affiliate", {}).get("name"):
+                    partner_name = conv.get("relationship", {}).get("affiliate", {}).get("name")
+                
+                # Format date
+                date_str = None
+                if conv.get("date"):
+                    date_str = conv.get("date")
+                elif conv.get("conversion_unix_timestamp"):
+                    from datetime import datetime
+                    try:
+                        ts = int(conv.get("conversion_unix_timestamp"))
+                        date_str = datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+                    except:
+                        pass
+                
+                # Only include key fields for preview to reduce JSON size
+                preview_conv = {
+                    "conversion_id": conv.get("conversion_id"),
+                    "status": conv.get("status"),
+                    "date": date_str,
+                    "offer": offer_name,
+                    "partner": partner_name,
+                    "payout": conv.get("payout")
+                }
+                preview_conversions.append(preview_conv)
+        
+        # Build the JSON data for frontend extraction
+        import time
+        json_start = time.time()
+        # Update pagination to reflect filtered count for fraud reports
+        if report_type.lower() == "fraud":
+            # For fraud reports, pagination should reflect filtered count
+            filtered_total = len(conversions)
+            pagination_info = {
+                "page": 1,  # Fraud reports are filtered client-side, so we show all on one "page"
+                "page_size": filtered_total,  # All filtered results
+                "total_count": filtered_total,  # Use filtered count
+                "total_pages": 1  # All results shown
+            }
+            print(f"📊 Pagination updated for fraud report: {filtered_total} fraud conversions")
+        else:
+            # For regular reports, use API pagination info
+            pagination_info = {
                 "page": paging.get("current_page", page),
                 "page_size": paging.get("page_size", page_size),
                 "total_count": paging.get("total_count", total),
                 "total_pages": paging.get("total_pages", 1)
-            },
+            }
+        
+        result_data = {
+            "status": "success",
+            "report_type": report_type,
+            "date_range": f"{from_date_str} to {to_date_str}",
+            "summary": summary,
+            "conversions": conversions,  # Full data for modal
+            "preview_conversions": preview_conversions,  # First 10 for preview table (minimal fields)
+            "pagination": pagination_info,
             "filters": filters_dict or {},
-            "_format_hint": "conversion_report"  # Special hint for agent
-        })
+        }
+        result_json = json.dumps(result_data)
+        json_time = time.time() - json_start
+        print(f"⏱️  JSON serialization took {json_time:.2f} seconds")
+        
+        # Pre-format the markdown table to avoid LLM processing delay
+        # This way the agent just passes it through without formatting
+        report_title = "Conversion Report for Fraud Detection" if report_type.lower() == "fraud" else "Conversion Report"
+        
+        markdown_response = f"""📊 **{report_title}**
+
+**Summary:**
+• Total Conversions: {summary['total']}
+• Approved: {summary['approved']}
+• Rejected (Manual): {summary['rejected_manual']}
+• Rejected (Throttle): {summary['rejected_throttle']}
+• Total Payout: €{summary['payout']:.2f}
+
+"""
+        
+        # Only add table if there are conversions
+        if len(preview_conversions) > 0:
+            markdown_response += "| Status | Date | Offer | Partner | Payout | Conversion ID |\n"
+            markdown_response += "| :----- | :--- | :---- | :------ | :----: | :------------ |\n"
+            
+            # Add preview rows (max 10)
+            preview_count = min(len(preview_conversions), 10)
+            for conv in preview_conversions[:preview_count]:
+                status = conv.get("status", "unknown")
+                date = conv.get("date", "N/A")
+                offer = conv.get("offer", "N/A") or "N/A"
+                partner = conv.get("partner", "N/A") or "N/A"
+                payout = conv.get("payout", 0) or 0
+                conv_id = conv.get("conversion_id", "N/A") or "N/A"
+                # Truncate long IDs
+                if conv_id and len(conv_id) > 20:
+                    conv_id = conv_id[:20] + "..."
+                
+                # Format payout
+                payout_str = f"€{float(payout):.2f}" if payout else "€0.00"
+                
+                markdown_response += f"| {status} | {date} | {offer[:30]} | {partner[:20]} | {payout_str} | {conv_id} |\n"
+            
+            # Add hint if there are more than 10 records
+            total_count = summary['total']  # Use summary total which is already filtered for fraud
+            if total_count > 10:
+                markdown_response += f"\n*Showing {preview_count} of {total_count} records. Click 'View Full Report' to see all records with all columns.*\n"
+        else:
+            # No conversions found
+            markdown_response += f"\n*No conversions found matching your criteria for the date range {from_date_str} to {to_date_str}.*\n"
+        
+        # Add JSON code block for frontend extraction
+        markdown_response += f"\n```json\n{result_json}\n```"
+        
+        print(f"✅ Pre-formatted markdown response ({len(markdown_response)} chars) - agent can pass through without formatting")
+        print(f"📊 Response preview (first 200 chars): {markdown_response[:200]}")
+        
+        # Validate response is not empty
+        if not markdown_response or len(markdown_response.strip()) == 0:
+            print(f"❌ ERROR: Markdown response is empty!")
+            return "❌ **Error**: Failed to generate conversion report. The response was empty. Please try again."
+        
+        return markdown_response
         
     except Exception as e:
         import traceback
@@ -936,11 +1204,25 @@ def wf3_fetch_conversions(
         traceback_str = traceback.format_exc()
         print(f"❌ Error in wf3_fetch_conversions: {error_details}")
         print(f"❌ Traceback: {traceback_str}")
-        return json.dumps({
-            "status": "error",
-            "message": f"Failed to fetch conversions: {error_details}",
-            "error_type": type(e).__name__
-        })
+        
+        # Return a user-friendly error message that the agent can pass through
+        error_message = f"""❌ **Error Fetching Conversion Report**
+
+Failed to fetch conversion data: {error_details}
+
+**Possible causes:**
+- The date range might be too large
+- The Everflow API might be experiencing issues
+- Invalid filters or parameters
+
+**Suggestions:**
+- Try a shorter date range (e.g., "last week" instead of "last month")
+- Verify the offer name, affiliate name, and source ID are correct
+- Check if the Everflow API is accessible
+
+Please try again with a different query or contact support if the issue persists."""
+        
+        return error_message
 
 
 @tool
@@ -962,7 +1244,8 @@ def wf4_check_default_lp_alert(
     return json.dumps({
         "status": "success",
         "alerts": [],
-        "message": "No default LP traffic detected above threshold"
+        "message": "No default LP traffic detected above threshold",
+        "_format_hint": "table"  # Format as table if alerts exist
     })
 
 
@@ -985,7 +1268,8 @@ def wf5_check_paused_partners(
     return json.dumps({
         "status": "success",
         "alerts": [],
-        "message": "No partners with significant volume drops detected"
+        "message": "No partners with significant volume drops detected",
+        "_format_hint": "table"  # Format as table if alerts exist
     })
 
 

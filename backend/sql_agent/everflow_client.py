@@ -121,12 +121,21 @@ class EverflowClient:
         url = f"{self.base_url}{endpoint}"
         
         try:
+            # Use longer timeout for reporting endpoints (they can take longer)
+            is_reporting_endpoint = any(ep in endpoint for ep in [
+                "/v1/networks/reporting/entity",
+                "/v1/networks/reporting/entity/table/export",
+                "/v1/networks/reporting/conversions",
+                "/v1/networks/reporting/conversions/export"
+            ])
+            timeout_seconds = 30 if is_reporting_endpoint else 10
+            
             if method.upper() == "GET":
                 # For GET requests, params should be query parameters
-                response = requests.get(url, headers=self.headers, params=params or data, timeout=10)
+                response = requests.get(url, headers=self.headers, params=params or data, timeout=timeout_seconds)
             else:
                 # For POST requests, data should be JSON body
-                response = requests.post(url, headers=self.headers, json=data, params=params, timeout=10)
+                response = requests.post(url, headers=self.headers, json=data, params=params, timeout=timeout_seconds)
             
             response.raise_for_status()
             return response.json()
@@ -542,6 +551,7 @@ class EverflowClient:
         
         print(f"🔍 Calling Everflow API: POST /v1/networks/reporting/conversions")
         print(f"🔍 Payload: {json.dumps(payload, indent=2)}")
+        print(f"⏱️  Timeout set to 30 seconds for reporting endpoint")
         try:
             response = self._request("POST", "/v1/networks/reporting/conversions", payload)
             
@@ -557,6 +567,10 @@ class EverflowClient:
                 "conversions": conversions,
                 "paging": paging
             }
+        except requests.exceptions.Timeout as e:
+            error_msg = f"Everflow API request timed out after 30 seconds. The query may be too large. Try a shorter date range or add more filters."
+            print(f"❌ Everflow API timeout: {error_msg}")
+            raise Exception(error_msg)
         except Exception as e:
             # Extract detailed error information
             error_msg = str(e)

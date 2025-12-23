@@ -15,6 +15,18 @@ from backend.sql_agent.workflow_agent import build_workflow_agent
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
+# Cache the agent to avoid rebuilding on every request (expensive operation)
+_agent_cache = None
+
+def get_agent():
+    """Get or build the workflow agent (cached)."""
+    global _agent_cache
+    if _agent_cache is None:
+        print("🔧 Building workflow agent (first request)...")
+        _agent_cache, _, _ = build_workflow_agent()
+        print("✅ Workflow agent built and cached")
+    return _agent_cache
+
 
 class ChatRequest(BaseModel):
     """Request model for chat queries."""
@@ -44,8 +56,14 @@ async def chat_query(
     - Return a formatted response
     """
     try:
-        # Build the workflow agent
-        agent, _, _ = build_workflow_agent()
+        import time
+        start_time = time.time()
+        
+        # Get the cached workflow agent (built once, reused for all requests)
+        agent = get_agent()
+        agent_time = time.time() - start_time
+        if agent_time > 0.1:
+            print(f"⏱️  Agent retrieval took {agent_time:.2f} seconds")
         
         # Use thread_id from request or generate a default one
         thread_id = request.thread_id or "default"
@@ -55,20 +73,58 @@ async def chat_query(
         
         # Invoke the agent with the user's message
         # AgentExecutor expects {"input": "message"} format
-        result = agent.invoke(
-            {"input": request.message},
-            config
-        )
+        invoke_start = time.time()
+        print(f"🚀 Invoking agent with message: {request.message[:100]}...")
+        
+        # Wrap agent.invoke with timeout protection using asyncio
+        import asyncio
+        from concurrent.futures import ThreadPoolExecutor
+        
+        loop = asyncio.get_event_loop()
+        executor = ThreadPoolExecutor(max_workers=1)
+        
+        try:
+            # Run agent.invoke in executor with timeout
+            result = await asyncio.wait_for(
+                loop.run_in_executor(
+                    executor,
+                    lambda: agent.invoke({"input": request.message}, config)
+                ),
+                timeout=80.0  # 80 second timeout (should be fast with pre-formatted responses)
+            )
+        except asyncio.TimeoutError:
+            executor.shutdown(wait=False)
+            raise HTTPException(
+                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                detail="Agent processing timed out after 100 seconds. The query may be too complex or the LLM is taking too long. Please try a simpler query or shorter date range."
+            )
+        finally:
+            executor.shutdown(wait=False)
+        
+        invoke_time = time.time() - invoke_start
+        print(f"⏱️  Agent processing took {invoke_time:.2f} seconds")
         
         # Extract the response from the agent's result
         # AgentExecutor returns {"output": "response"} format
+        print(f"🔍 Agent result keys: {list(result.keys()) if isinstance(result, dict) else 'not a dict'}")
+        
         if "output" in result:
             response_content = result["output"]
+            print(f"📝 Using 'output' field, length: {len(str(response_content))}")
         elif "messages" in result:
             last_message = result["messages"][-1]
             response_content = last_message.content if hasattr(last_message, "content") else str(last_message)
+            print(f"📝 Using 'messages' field, length: {len(str(response_content))}")
         else:
             response_content = str(result)
+            print(f"📝 Using str(result), length: {len(str(response_content))}")
+        
+        # Validate response is not empty
+        if not response_content or (isinstance(response_content, str) and response_content.strip() == ""):
+            print(f"⚠️  Warning: Agent returned empty response. Result structure: {type(result)}")
+            if isinstance(result, dict):
+                print(f"⚠️  Result dict contents: {list(result.keys())}")
+            response_content = "I apologize, but I received an empty response from the workflow agent. Please try your query again or rephrase it."
         
         return ChatResponse(
             response=response_content,
