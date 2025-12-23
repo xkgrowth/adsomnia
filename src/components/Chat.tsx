@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useImperativeHandle, forwardRef } from "react";
 import { sendChatMessage, fetchEntities, exportReportCSV, type Affiliate, type Offer, type ReportData, type ExportRequest } from "@/lib/api";
 import ReportModal, { type ReportRow } from "./ReportModal";
 
@@ -129,7 +129,83 @@ const generateExampleQueries = (affiliates: Affiliate[], offers: Offer[]): Examp
   ];
 };
 
-export default function Chat() {
+export type ChatSession = {
+  id: string;
+  title: string;
+  threadId: string | null;
+  messages: Message[];
+  timestamp: Date;
+  lastUpdated: Date;
+};
+
+export type ChatHandle = {
+  clearChat: () => void;
+  loadChat: (session: ChatSession) => void;
+  getCurrentSession: () => ChatSession | null;
+};
+
+const STORAGE_KEY = "adsomnia_recent_chats";
+const MAX_RECENT_CHATS = 20;
+
+// Helper functions for localStorage
+const saveChatToStorage = (session: ChatSession) => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    const chats: ChatSession[] = stored ? JSON.parse(stored) : [];
+    
+    // Remove existing chat with same ID if it exists
+    const filtered = chats.filter(c => c.id !== session.id);
+    
+    // Add updated chat at the beginning
+    const updated = [session, ...filtered].slice(0, MAX_RECENT_CHATS);
+    
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  } catch (err) {
+    console.error("Failed to save chat to storage:", err);
+  }
+};
+
+export const getRecentChats = (): ChatSession[] => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) return [];
+    const chats: ChatSession[] = JSON.parse(stored);
+    // Convert timestamp strings back to Date objects
+    return chats.map(chat => ({
+      ...chat,
+      timestamp: new Date(chat.timestamp),
+      lastUpdated: new Date(chat.lastUpdated),
+      messages: chat.messages.map(msg => ({
+        ...msg,
+        timestamp: new Date(msg.timestamp),
+      })),
+    }));
+  } catch (err) {
+    console.error("Failed to load chats from storage:", err);
+    return [];
+  }
+};
+
+export const deleteChatFromStorage = (chatId: string) => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) return;
+    const chats: ChatSession[] = JSON.parse(stored);
+    const filtered = chats.filter(c => c.id !== chatId);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+  } catch (err) {
+    console.error("Failed to delete chat from storage:", err);
+  }
+};
+
+const generateChatTitle = (firstMessage: string): string => {
+  // Use the full first user message as the title
+  // The UI will handle truncation with line-clamp
+  const trimmed = firstMessage.trim();
+  return trimmed || "New Chat";
+};
+
+const Chat = forwardRef<ChatHandle>((props, ref) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -141,6 +217,7 @@ export default function Chat() {
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [currentReportData, setCurrentReportData] = useState<ReportData | null>(null);
   const [isLoadingFullReport, setIsLoadingFullReport] = useState(false);
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -180,6 +257,59 @@ export default function Chat() {
 
   // Generate example queries with current entities
   const exampleQueries = generateExampleQueries(affiliates, offers);
+
+  // Expose methods via ref
+  useImperativeHandle(ref, () => ({
+    clearChat: () => {
+      setMessages([]);
+      setInput("");
+      setThreadId(null);
+      setError(null);
+      setCurrentChatId(null);
+      setReportModalOpen(false);
+      setCurrentReportData(null);
+    },
+    loadChat: (session: ChatSession) => {
+      setMessages(session.messages);
+      setThreadId(session.threadId);
+      setCurrentChatId(session.id);
+      setInput("");
+      setError(null);
+    },
+    getCurrentSession: (): ChatSession | null => {
+      if (messages.length === 0) return null;
+      const firstUserMessage = messages.find(m => m.role === "user");
+      return {
+        id: currentChatId || Date.now().toString(),
+        title: firstUserMessage ? generateChatTitle(firstUserMessage.content) : "New Chat",
+        threadId,
+        messages,
+        timestamp: messages[0]?.timestamp || new Date(),
+        lastUpdated: new Date(),
+      };
+    },
+  }));
+
+  // Save chat to localStorage when messages change
+  useEffect(() => {
+    if (messages.length > 0) {
+      const firstUserMessage = messages.find(m => m.role === "user");
+      if (firstUserMessage) {
+        const chatId = currentChatId || Date.now().toString();
+        setCurrentChatId(chatId);
+        
+        const session: ChatSession = {
+          id: chatId,
+          title: generateChatTitle(firstUserMessage.content),
+          threadId,
+          messages,
+          timestamp: messages[0].timestamp,
+          lastUpdated: new Date(),
+        };
+        saveChatToStorage(session);
+      }
+    }
+  }, [messages, threadId, currentChatId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -845,4 +975,8 @@ export default function Chat() {
       )}
     </div>
   );
-}
+});
+
+Chat.displayName = "Chat";
+
+export default Chat;
