@@ -484,7 +484,7 @@ export default function Chat() {
     
     if (tableMatches.length > 0) {
       // Split content by tables and process each part
-      const parts: (string | JSX.Element)[] = [];
+      const parts: (string | React.ReactElement)[] = [];
       let lastIndex = 0;
       
       tableMatches.forEach((match, matchIndex) => {
