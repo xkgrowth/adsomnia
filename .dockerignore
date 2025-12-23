@@ -40,10 +40,9 @@ docs/
 *.md
 !README.md
 
-# Test files
-test_*.py
-*_test.py
-tests/
+# Test files (excluding test_data_reference.py which is a required module)
+**/*_test.py
+**/tests/
 
 # OS
 .DS_Store

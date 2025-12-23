@@ -1,0 +1,57 @@
+name: Deploy Backend to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - 'Dockerfile'
+      - 'requirements.txt'
+      - '.dockerignore'
+      - '.gcloudignore'
+      - 'cloudbuild-sa.yaml'
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: p-power-up-ai
+  REGION: us-central1
+  SERVICE_NAME: adsomnia-backend
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+        # Note: If you don't have GCP_SA_KEY secret, create a service account key and add it as a GitHub secret
+        # Alternatively, use Workload Identity Federation if you have permissions
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run using Cloud Build
+        run: |
+          gcloud builds submit --config=cloudbuild-sa.yaml \
+            --project=${{ env.PROJECT_ID }} \
+            --timeout=20m
+
+      - name: Get Service URL
+        run: |
+          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --platform managed \
+            --region ${{ env.REGION }} \
+            --project ${{ env.PROJECT_ID }} \
+            --format 'value(status.url)')
+          echo "🌐 Backend deployed to: $SERVICE_URL"
+          echo "📚 API Docs: $SERVICE_URL/docs"
+          echo "::set-output name=url::$SERVICE_URL"
+

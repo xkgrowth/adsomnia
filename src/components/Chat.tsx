@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect, useImperativeHandle, forwardRef } from "react";
-import { sendChatMessage, fetchEntities, exportReportCSV, type Affiliate, type Offer, type ReportData, type ExportRequest, fetchConversions, updateConversionStatus, bulkUpdateConversionStatus, type FetchConversionsResponse, type ConversionReportData } from "@/lib/api";
+import { sendChatMessage, fetchEntities, exportReportCSV, type Affiliate, type Offer, type ReportData, type ExportRequest, fetchConversions, updateConversionStatus, bulkUpdateConversionStatus, type FetchConversionsResponse } from "@/lib/api";
 import ReportModal, { type ReportRow } from "./ReportModal";
-import ConversionReportModal, { type ConversionRecord } from "./ConversionReportModal";
+import ConversionReportModal, { type ConversionRecord, type ConversionReportData } from "./ConversionReportModal";
 
 type Message = {
   id: string;

@@ -8,6 +8,9 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_APP_NAME: "Adsomnia Talk-to-Data",
   },
+  
+  // Output standalone for Docker deployment
+  output: 'standalone',
 };
 
 export default nextConfig;

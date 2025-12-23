@@ -1,0 +1,56 @@
+name: Deploy Frontend to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'next.config.ts'
+      - 'package.json'
+      - 'tailwind.config.ts'
+      - 'tsconfig.json'
+      - 'Dockerfile.frontend'
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: p-power-up-ai
+  REGION: us-central1
+  SERVICE_NAME: adsomnia-frontend
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy Frontend to Cloud Run using Cloud Build
+        run: |
+          gcloud builds submit --config=cloudbuild-frontend.yaml \
+            --project=${{ env.PROJECT_ID }} \
+            --timeout=20m \
+            --substitutions=SHORT_SHA=${{ github.sha }}
+
+      - name: Get Service URL
+        run: |
+          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} \
+            --platform managed \
+            --region ${{ env.REGION }} \
+            --project ${{ env.PROJECT_ID }} \
+            --format 'value(status.url)')
+          echo "🌐 Frontend deployed to: $SERVICE_URL"
+          echo "::set-output name=url::$SERVICE_URL"
+

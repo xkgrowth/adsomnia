@@ -1,0 +1,31 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-f', 'Dockerfile.frontend', '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/adsomnia/adsomnia-frontend:latest', '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/adsomnia/adsomnia-frontend:$SHORT_SHA', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'us-central1-docker.pkg.dev/$PROJECT_ID/adsomnia/adsomnia-frontend:latest']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'us-central1-docker.pkg.dev/$PROJECT_ID/adsomnia/adsomnia-frontend:$SHORT_SHA']
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'adsomnia-frontend'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/adsomnia/adsomnia-frontend:$SHORT_SHA'
+      - '--platform=managed'
+      - '--region=us-central1'
+      - '--allow-unauthenticated'
+      - '--port=3000'
+      - '--memory=512Mi'
+      - '--cpu=1'
+      - '--timeout=300'
+      - '--max-instances=10'
+      - '--set-env-vars=NEXT_PUBLIC_API_URL=https://adsomnia-backend-3naijkhxba-uc.a.run.app'
+      - '--project=$PROJECT_ID'
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/adsomnia/adsomnia-frontend:latest'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/adsomnia/adsomnia-frontend:$SHORT_SHA'
+options:
+  logging: CLOUD_LOGGING_ONLY
+serviceAccount: 'projects/p-power-up-ai/serviceAccounts/cursoraiblablabuild@p-power-up-ai.iam.gserviceaccount.com'
+

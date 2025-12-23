@@ -1,0 +1,28 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'us-central1-docker.pkg.dev/$PROJECT_ID/adsomnia/adsomnia-backend:latest', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'us-central1-docker.pkg.dev/$PROJECT_ID/adsomnia/adsomnia-backend:latest']
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'adsomnia-backend'
+      - '--image=us-central1-docker.pkg.dev/$PROJECT_ID/adsomnia/adsomnia-backend:latest'
+      - '--platform=managed'
+      - '--region=us-central1'
+      - '--allow-unauthenticated'
+      - '--port=8080'
+      - '--memory=512Mi'
+      - '--cpu=1'
+      - '--timeout=300'
+      - '--max-instances=10'
+      - '--set-env-vars=EVERFLOW_BASE_URL=https://api.eflow.team,EVERFLOW_TIMEZONE_ID=67'
+      - '--update-secrets=API_KEY=API_KEY:latest,EVERFLOW_API_KEY=EVERFLOW_API_KEY:latest,GEMINI_KEY=GEMINI_KEY:latest'
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/adsomnia/adsomnia-backend:latest'
+options:
+  logging: CLOUD_LOGGING_ONLY
+serviceAccount: 'projects/p-power-up-ai/serviceAccounts/cursoraiblablabuild@p-power-up-ai.iam.gserviceaccount.com'
+

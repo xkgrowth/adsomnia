@@ -15,7 +15,7 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy application code (excluding patterns in .dockerignore)
 COPY backend/ ./backend/
 COPY .env.example ./.env.example
 
