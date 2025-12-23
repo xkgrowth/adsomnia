@@ -50,6 +50,15 @@ class EverflowClient:
         endpoint_result = validator.validate_endpoint(endpoint, method)
         
         if not endpoint_result.valid:
+            # For GET requests to known endpoints, be more lenient (just warn, don't block)
+            if method.upper() == "GET" and any(known in endpoint for known in ["/v1/networks/affiliates", "/v1/networks/offers"]):
+                logger.warning(f"Endpoint validation warning (allowing anyway): {endpoint_result.errors}")
+                # Return a valid result with warnings
+                return ValidationResult(
+                    valid=True,
+                    warnings=endpoint_result.errors,
+                    suggestions=endpoint_result.suggestions
+                )
             logger.warning(f"Endpoint validation failed: {endpoint_result.errors}")
             return endpoint_result
         
@@ -82,13 +91,21 @@ class EverflowClient:
         # Validate request before making it
         validation = self._validate_request(method, endpoint, data)
         
+        # For GET requests to known entity endpoints, be lenient (warn but don't block)
+        is_entity_endpoint = any(ep in endpoint for ep in ["/v1/networks/affiliates", "/v1/networks/offers"])
+        
         if not validation.valid:
-            error_msg = "API Request Validation Failed:\n"
-            error_msg += "\n".join(f"  - {e}" for e in validation.errors)
-            if validation.suggestions:
-                error_msg += "\n\nSuggestions:\n"
-                error_msg += "\n".join(f"  - {s}" for s in validation.suggestions)
-            raise ValueError(error_msg)
+            if method.upper() == "GET" and is_entity_endpoint:
+                # For GET requests to entity endpoints, just warn but proceed
+                logger.warning(f"Endpoint validation warning (proceeding anyway): {validation.errors}")
+            else:
+                # For other requests, block if validation fails
+                error_msg = "API Request Validation Failed:\n"
+                error_msg += "\n".join(f"  - {e}" for e in validation.errors)
+                if validation.suggestions:
+                    error_msg += "\n\nSuggestions:\n"
+                    error_msg += "\n".join(f"  - {s}" for s in validation.suggestions)
+                raise ValueError(error_msg)
         
         if validation.warnings:
             for warning in validation.warnings:

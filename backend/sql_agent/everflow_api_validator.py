@@ -237,6 +237,22 @@ class EverflowAPIValidator:
                 },
                 response_fields=["offers", "paging"]
             ),
+            "/v1/networks/reporting/conversions/export": EndpointSpec(
+                path="/v1/networks/reporting/conversions/export",
+                method="POST",
+                description="Export conversion reports to CSV",
+                required_params=["from", "to", "timezone_id"],
+                optional_params=["query", "format", "show_conversions", "show_events"],
+                param_types={
+                    "from": "string",
+                    "to": "string",
+                    "timezone_id": "integer",
+                    "format": "string",
+                    "show_conversions": "boolean",
+                    "show_events": "boolean"
+                },
+                response_fields=["export_id", "download_url"]
+            ),
         }
     
     def _parse_documentation(self, docs: Dict[str, Any]):
