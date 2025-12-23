@@ -45,3 +45,4 @@ Check your browser console (F12) to see:
 - `Fetched entities response:` - Shows what the API returned
 - `⚠️ No affiliates returned from API` - Confirms fallback is being used
 
+

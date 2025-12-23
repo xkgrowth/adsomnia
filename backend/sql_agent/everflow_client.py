@@ -27,79 +27,219 @@ class EverflowClient:
             "Content-Type": "application/json"
         }
     
-    def _request(self, method: str, endpoint: str, data: Optional[Dict] = None) -> Dict:
-        """Make API request."""
+    def _request(self, method: str, endpoint: str, data: Optional[Dict] = None, params: Optional[Dict] = None) -> Dict:
+        """Make API request.
+        
+        Args:
+            method: HTTP method (GET, POST, etc.)
+            endpoint: API endpoint path
+            data: JSON body data (for POST requests)
+            params: Query parameters (for GET requests)
+        """
         url = f"{self.base_url}{endpoint}"
         
         try:
             if method.upper() == "GET":
-                # For GET requests, data should be query parameters
-                response = requests.get(url, headers=self.headers, params=data, timeout=10)
+                # For GET requests, params should be query parameters
+                response = requests.get(url, headers=self.headers, params=params or data, timeout=10)
             else:
                 # For POST requests, data should be JSON body
-                response = requests.post(url, headers=self.headers, json=data, timeout=10)
+                response = requests.post(url, headers=self.headers, json=data, params=params, timeout=10)
             
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
-            print(f"API Error: {str(e)}")
-            if hasattr(e, 'response') and hasattr(e.response, 'text'):
-                print(f"Response: {e.response.text}")
-            raise
+            error_msg = f"API Error: {str(e)}"
+            if hasattr(e, 'response'):
+                if hasattr(e.response, 'status_code'):
+                    error_msg += f" (Status: {e.response.status_code})"
+                if hasattr(e.response, 'text'):
+                    try:
+                        error_json = e.response.json()
+                        error_msg += f"\nAPI Error Details: {json.dumps(error_json, indent=2)}"
+                    except:
+                        error_msg += f"\nAPI Response: {e.response.text}"
+            print(error_msg)
+            raise Exception(error_msg) from e
     
-    def get_affiliates(self, limit: int = 10) -> List[Dict]:
-        """Get list of affiliates/partners using the correct Everflow API endpoint."""
+    def get_affiliates(self, limit: Optional[int] = None) -> List[Dict]:
+        """
+        Get list of affiliates/partners using the correct Everflow API endpoint with full pagination.
+        
+        Args:
+            limit: Maximum number of affiliates to return. If None, fetches ALL affiliates.
+        
+        Returns:
+            List of affiliate dictionaries with full pagination support.
+        """
         try:
-            # Use the correct endpoint: GET /v1/networks/affiliates
-            response = self._request("GET", "/v1/networks/affiliates")
-            data = response.get("affiliates", [])
+            all_affiliates = []
+            page = 1
+            page_size = 50  # Default page size from API
             
-            # Extract and format affiliates
-            affiliates = []
-            for aff in data[:limit]:
-                aff_id = aff.get("network_affiliate_id")
-                if aff_id:
-                    affiliates.append({
-                        "affiliate_id": aff_id,
-                        "affiliate_name": aff.get("name", f"Partner {aff_id}"),
-                        # Include additional fields for reference
-                        "account_status": aff.get("account_status"),
-                        "_raw": aff  # Store full response for debugging
-                    })
+            while True:
+                # Use pagination - Everflow API supports page parameter
+                params = {"page": page}
+                
+                response = self._request("GET", "/v1/networks/affiliates", params=params)
+                data = response.get("affiliates", [])
+                paging = response.get("paging", {})
+                
+                if not data:
+                    break  # No more affiliates
+                
+                # Extract and format affiliates
+                for aff in data:
+                    aff_id = aff.get("network_affiliate_id")
+                    if aff_id:
+                        all_affiliates.append({
+                            "affiliate_id": aff_id,
+                            "affiliate_name": aff.get("name", f"Partner {aff_id}"),
+                            # Include additional fields for reference
+                            "account_status": aff.get("account_status"),
+                            "_raw": aff  # Store full response for debugging
+                        })
+                        
+                        # Stop if we've reached the limit
+                        if limit and len(all_affiliates) >= limit:
+                            break
+                
+                # Check if we've reached the limit
+                if limit and len(all_affiliates) >= limit:
+                    break
+                
+                # Check if there are more pages
+                total_count = paging.get("total_count", 0)
+                
+                # If we've fetched all available affiliates, stop
+                if total_count > 0 and len(all_affiliates) >= total_count:
+                    break
+                
+                # If we got fewer than expected, we've reached the last page
+                if len(data) < page_size:
+                    break
+                
+                # Check if we've fetched enough (safety check)
+                if total_count > 0:
+                    remaining = total_count - len(all_affiliates)
+                    if remaining <= 0:
+                        break
+                
+                page += 1
+                
+                # Safety limit to prevent infinite loops
+                if page > 50:
+                    break
             
-            return affiliates
+            # Return up to limit if specified, otherwise return all
+            if limit:
+                return all_affiliates[:limit]
+            return all_affiliates
         except Exception as e:
             print(f"Error fetching affiliates: {str(e)}")
             return []
     
-    def get_offers(self, limit: int = 10) -> List[Dict]:
-        """Get list of offers using the correct Everflow API endpoint."""
+    def get_offers(self, limit: Optional[int] = None, search_term: Optional[str] = None) -> List[Dict]:
+        """
+        Get list of offers using the correct Everflow API endpoint with full pagination.
+        
+        Args:
+            limit: Maximum number of offers to return. If None, fetches ALL offers.
+            search_term: Optional search term to filter offers by name (client-side filtering)
+        
+        Returns:
+            List of offer dictionaries with full pagination support.
+        """
         try:
-            # Use the correct endpoint: GET /v1/networks/offers
-            response = self._request("GET", "/v1/networks/offers")
-            data = response.get("offers", [])
+            all_offers = []
+            page = 1
+            page_size = 50  # Default page size from API
             
-            # Extract and format offers
-            offers = []
-            for offer in data[:limit]:
-                offer_id = offer.get("network_offer_id")
-                if offer_id:
-                    offers.append({
-                        "offer_id": offer_id,
-                        "offer_name": offer.get("name", f"Offer {offer_id}"),
-                        # Include additional fields for reference
-                        "advertiser_id": offer.get("network_advertiser_id"),
-                        "destination_url": offer.get("destination_url"),
-                        "_raw": offer  # Store full response for debugging
-                    })
+            while True:
+                # Use pagination - Everflow API supports page parameter
+                params = {"page": page}
+                
+                response = self._request("GET", "/v1/networks/offers", params=params)
+                data = response.get("offers", [])
+                paging = response.get("paging", {})
+                
+                if not data:
+                    break  # No more offers
+                
+                # Extract and format offers
+                for offer in data:
+                    offer_id = offer.get("network_offer_id")
+                    if offer_id:
+                        offer_name = offer.get("name", f"Offer {offer_id}")
+                        
+                        # If search_term provided, filter by name
+                        if search_term and search_term.lower() not in offer_name.lower():
+                            continue
+                        
+                        all_offers.append({
+                            "offer_id": offer_id,
+                            "offer_name": offer_name,
+                            # Include additional fields for reference
+                            "advertiser_id": offer.get("network_advertiser_id"),
+                            "destination_url": offer.get("destination_url"),
+                            "_raw": offer  # Store full response for debugging
+                        })
+                        
+                        # Stop if we've reached the limit
+                        if limit and len(all_offers) >= limit:
+                            break
+                
+                # Check if we've reached the limit
+                if limit and len(all_offers) >= limit:
+                    break
+                
+                # Check if there are more pages
+                total_count = paging.get("total_count", 0)
+                
+                # If we've fetched all available offers, stop
+                if total_count > 0 and len(all_offers) >= total_count:
+                    print(f"✅ Fetched all {total_count} offers across {page} pages")
+                    break
+                
+                # If we got fewer than expected, we've reached the last page
+                if len(data) < page_size:
+                    print(f"✅ Reached last page (page {page}, got {len(data)} offers)")
+                    break
+                
+                # Check if we've fetched enough (safety check)
+                # If total_count is available and we've reached it, stop
+                if total_count > 0:
+                    # Calculate if we need more pages
+                    remaining = total_count - len(all_offers)
+                    if remaining <= 0:
+                        break
+                
+                page += 1
+                
+                # Safety limit to prevent infinite loops (max 50 pages = 2500 offers)
+                if page > 50:
+                    print(f"⚠️  Reached safety limit of 50 pages, stopping pagination")
+                    break
             
-            return offers
+            # Return up to limit if specified, otherwise return all
+            if limit:
+                return all_offers[:limit]
+            return all_offers
         except Exception as e:
             print(f"Error fetching offers: {str(e)}")
             return []
     
-    def get_landing_pages(self, offer_id: Optional[int] = None, limit: int = 10) -> List[Dict]:
-        """Get list of landing pages (offer URLs)."""
+    def get_landing_pages(self, offer_id: Optional[int] = None, limit: Optional[int] = None) -> List[Dict]:
+        """
+        Get list of landing pages (offer URLs) with full pagination support.
+        
+        Args:
+            offer_id: Optional offer ID to filter landing pages
+            limit: Maximum number of landing pages to return. If None, fetches ALL landing pages.
+        
+        Returns:
+            List of landing page dictionaries with full pagination support.
+        """
         from datetime import datetime, timedelta
         to_date = datetime.now()
         from_date = to_date - timedelta(days=30)
@@ -113,79 +253,157 @@ class EverflowClient:
                 "filter_id_value": str(offer_id)
             })
         
-        payload = {
-            "columns": columns,
-            "query": {"filters": filters},
-            "from": from_date.strftime("%Y-%m-%d"),
-            "to": to_date.strftime("%Y-%m-%d"),
-            "timezone_id": self.timezone_id
-        }
+        all_lps = []
+        page = 1
+        page_size = 100  # Default page size for entity reports
         
         try:
-            response = self._request("POST", "/v1/networks/reporting/entity", payload)
-            table = response.get("table", [])
+            while True:
+                payload = {
+                    "columns": columns,
+                    "query": {"filters": filters},
+                    "from": from_date.strftime("%Y-%m-%d"),
+                    "to": to_date.strftime("%Y-%m-%d"),
+                    "timezone_id": self.timezone_id,
+                    "page": page,
+                    "page_size": page_size
+                }
+                
+                response = self._request("POST", "/v1/networks/reporting/entity", payload)
+                table = response.get("table", [])
+                paging = response.get("paging", {})
+                
+                if not table:
+                    break  # No more landing pages
+                
+                # Extract unique landing pages - use ALL fields from API response
+                seen_ids = set([lp.get("offer_url_id") for lp in all_lps if lp.get("offer_url_id")])
+                
+                for row in table:
+                    lp_id = row.get("offer_url_id")
+                    if lp_id and lp_id not in seen_ids:
+                        seen_ids.add(lp_id)
+                        # Capture ALL landing page fields from Everflow API response
+                        all_lps.append({
+                            "offer_url_id": lp_id,
+                            "offer_url_name": row.get("offer_url_name") or row.get("offer_url") or f"LP {lp_id}",
+                            "offer_id": row.get("offer_id"),
+                            "offer_url": row.get("offer_url"),  # Sometimes the name is in this field
+                            # Store full row for additional context
+                            "_raw": {k: v for k, v in row.items() if k.startswith("offer_url")}
+                        })
+                        
+                        # Stop if we've reached the limit
+                        if limit and len(all_lps) >= limit:
+                            break
+                
+                # Check if we've reached the limit
+                if limit and len(all_lps) >= limit:
+                    break
+                
+                # Check if there are more pages
+                total_count = paging.get("total_count", 0)
+                total_pages = paging.get("total_pages", 1)
+                current_page = paging.get("current_page", page)
+                
+                # If we've fetched all available landing pages, stop
+                if total_count > 0 and len(all_lps) >= total_count:
+                    break
+                
+                # If we've reached the last page or got fewer than expected, stop
+                if current_page >= total_pages or len(table) < page_size:
+                    break
+                
+                page += 1
             
-            # Extract unique landing pages - use ALL fields from API response
-            lps = []
-            seen_ids = set()
-            for row in table:
-                lp_id = row.get("offer_url_id")
-                if lp_id and lp_id not in seen_ids:
-                    seen_ids.add(lp_id)
-                    # Capture ALL landing page fields from Everflow API response
-                    lps.append({
-                        "offer_url_id": lp_id,
-                        "offer_url_name": row.get("offer_url_name") or row.get("offer_url") or f"LP {lp_id}",
-                        "offer_id": row.get("offer_id"),
-                        "offer_url": row.get("offer_url"),  # Sometimes the name is in this field
-                        # Store full row for additional context
-                        "_raw": {k: v for k, v in row.items() if k.startswith("offer_url")}
-                    })
-                    if len(lps) >= limit:
-                        break
-            
-            return lps
+            # Return up to limit if specified, otherwise return all
+            if limit:
+                return all_lps[:limit]
+            return all_lps
         except Exception as e:
             print(f"Error fetching landing pages: {str(e)}")
             return []
     
-    def get_countries(self) -> List[str]:
-        """Get list of countries with traffic."""
+    def get_countries(self, limit: Optional[int] = None) -> List[Dict]:
+        """
+        Get list of countries with traffic, with full pagination support.
+        
+        Args:
+            limit: Maximum number of countries to return. If None, fetches ALL countries.
+        
+        Returns:
+            List of country dictionaries with full pagination support.
+        """
         from datetime import datetime, timedelta
         to_date = datetime.now()
         from_date = to_date - timedelta(days=30)
         
-        payload = {
-            "columns": [{"column": "country"}],
-            "query": {"filters": []},
-            "from": from_date.strftime("%Y-%m-%d"),
-            "to": to_date.strftime("%Y-%m-%d"),
-            "timezone_id": self.timezone_id
-        }
+        all_countries = []
+        page = 1
+        page_size = 100  # Default page size for entity reports
+        seen = set()
         
         try:
-            response = self._request("POST", "/v1/networks/reporting/entity", payload)
-            table = response.get("table", [])
+            while True:
+                payload = {
+                    "columns": [{"column": "country"}],
+                    "query": {"filters": []},
+                    "from": from_date.strftime("%Y-%m-%d"),
+                    "to": to_date.strftime("%Y-%m-%d"),
+                    "timezone_id": self.timezone_id,
+                    "page": page,
+                    "page_size": page_size
+                }
+                
+                response = self._request("POST", "/v1/networks/reporting/entity", payload)
+                table = response.get("table", [])
+                paging = response.get("paging", {})
+                
+                if not table:
+                    break  # No more countries
+                
+                # Extract countries with ALL fields from API response
+                for row in table:
+                    country_code = row.get("country_code")
+                    if country_code and country_code not in seen:
+                        seen.add(country_code)
+                        # Capture ALL country fields from Everflow API response
+                        all_countries.append({
+                            "code": country_code,
+                            "name": row.get("country_name") or row.get("country") or country_code,
+                            "country": row.get("country"),  # Sometimes the name is in this field
+                            "country_name": row.get("country_name"),  # Explicit country_name field
+                            # Store full row for additional context
+                            "_raw": {k: v for k, v in row.items() if k.startswith("country")}
+                        })
+                        
+                        # Stop if we've reached the limit
+                        if limit and len(all_countries) >= limit:
+                            break
+                
+                # Check if we've reached the limit
+                if limit and len(all_countries) >= limit:
+                    break
+                
+                # Check if there are more pages
+                total_count = paging.get("total_count", 0)
+                total_pages = paging.get("total_pages", 1)
+                current_page = paging.get("current_page", page)
+                
+                # If we've fetched all available countries, stop
+                if total_count > 0 and len(all_countries) >= total_count:
+                    break
+                
+                # If we've reached the last page or got fewer than expected, stop
+                if current_page >= total_pages or len(table) < page_size:
+                    break
+                
+                page += 1
             
-            # Extract countries with ALL fields from API response
-            countries = []
-            seen = set()
-            for row in table:
-                country_code = row.get("country_code")
-                if country_code and country_code not in seen:
-                    seen.add(country_code)
-                    # Capture ALL country fields from Everflow API response
-                    countries.append({
-                        "code": country_code,
-                        "name": row.get("country_name") or row.get("country") or country_code,
-                        "country": row.get("country"),  # Sometimes the name is in this field
-                        "country_name": row.get("country_name"),  # Explicit country_name field
-                        # Store full row for additional context
-                        "_raw": {k: v for k, v in row.items() if k.startswith("country")}
-                    })
-            
-            # Return as list of dicts with all fields
-            return countries
+            # Return up to limit if specified, otherwise return all
+            if limit:
+                return all_countries[:limit]
+            return all_countries
         except Exception as e:
             print(f"Error fetching countries: {str(e)}")
             return []

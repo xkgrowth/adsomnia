@@ -31,8 +31,12 @@ WORKFLOW_DESCRIPTIONS = {
     Optional parameters:
     - country_code: ISO country code (e.g., "US", "DE", "FR")
     - days: Number of days to analyze (default: 30)
+      * IMPORTANT: If user specifies "year to date" or "YTD", calculate days from January 1st of current year to today
+      * If user specifies "last week", use 7 days
+      * If user specifies "last month", use ~30 days
+      * Always parse date ranges from the user query and calculate the days parameter
     - min_leads: Minimum conversions for significance (default: 20)
-    - top_n: Number of results to return (default: 3)
+    - top_n: Number of results to return (default: 10)
     
     Returns top N landing pages sorted by conversion rate.
     """,
@@ -135,7 +139,8 @@ def wf2_identify_top_lps(
     country_code: Optional[Union[str, int]] = None,
     days: int = 30,
     min_leads: int = 20,
-    top_n: int = 3
+    top_n: int = 10,
+    label: Optional[str] = None
 ) -> str:
     """
     Find top performing landing pages for an offer.
@@ -145,7 +150,8 @@ def wf2_identify_top_lps(
         country_code: Optional ISO country code (US, DE, FR, etc.) or country name
         days: Number of days to analyze (default: 30)
         min_leads: Minimum conversions for significance (default: 20)
-        top_n: Number of results to return (default: 3)
+        top_n: Number of results to return (default: 10)
+        label: Optional label filter (e.g., "Advertiser_Internal")
     
     Returns:
         JSON string with top N landing pages
@@ -155,10 +161,45 @@ def wf2_identify_top_lps(
     # Resolve offer name to ID
     resolved_offer_id = resolver.resolve_offer(offer_id)
     if resolved_offer_id is None:
-        return json.dumps({
-            "status": "error",
-            "message": f"Could not find offer: {offer_id}. Please provide a valid offer ID or name."
-        })
+        # Try to find similar offers for better error message
+        try:
+            from .everflow_client import EverflowClient
+            client = EverflowClient()
+            # Fetch ALL offers to find similar ones (no limit)
+            all_offers = client.get_offers(limit=None)
+            
+            # Find offers with similar names (fuzzy match on first word)
+            search_term = str(offer_id).lower().strip()
+            search_words = [w for w in search_term.split() if len(w) > 2]
+            similar_offers = []
+            
+            if search_words:
+                first_word = search_words[0]
+                for offer in all_offers[:20]:  # Check first 20 for suggestions
+                    offer_name = str(offer.get("offer_name", "")).lower()
+                    if first_word in offer_name:
+                        similar_offers.append({
+                            "offer_id": offer.get("offer_id"),
+                            "offer_name": offer.get("offer_name")
+                        })
+            
+            error_msg = f"Could not find offer: {offer_id}."
+            if similar_offers:
+                error_msg += f"\n\nDid you mean one of these?\n"
+                for similar in similar_offers[:5]:
+                    error_msg += f"- {similar['offer_name']} (ID: {similar['offer_id']})\n"
+            else:
+                error_msg += " Please provide a valid offer ID or name."
+            
+            return json.dumps({
+                "status": "error",
+                "message": error_msg
+            })
+        except Exception as e:
+            return json.dumps({
+                "status": "error",
+                "message": f"Could not find offer: {offer_id}. Please provide a valid offer ID or name."
+            })
     
     # Resolve country name to code
     resolved_country = None
@@ -173,35 +214,173 @@ def wf2_identify_top_lps(
         # If it's already a code, use it
         if resolved_country is None:
             resolved_country = country_code.upper() if isinstance(country_code, str) else str(country_code)
-    # TODO: Implement actual Everflow API call
-    # Return structured data - agent will format as table
-    return json.dumps({
-        "status": "success",
-        "offer_id": resolved_offer_id,
-        "country_code": resolved_country,
-        "period_days": days,
-        "top_lps": [
+    
+    # Implement actual Everflow API call
+    try:
+        from .everflow_client import EverflowClient
+        from datetime import datetime, timedelta
+        
+        client = EverflowClient()
+        
+        # Calculate date range
+        to_date = datetime.now()
+        
+        # Special handling for "year to date" - if days is very large (>= 300), 
+        # it's likely a year-to-date request, so use January 1st of current year
+        if days >= 300:
+            # Year to date: from January 1st of current year to today
+            from_date = datetime(to_date.year, 1, 1)
+        else:
+            # Regular date range: go back N days
+            from_date = to_date - timedelta(days=days)
+        
+        # Build columns - must be objects with "column" key
+        columns = [
+            {"column": "offer_url"},
+            {"column": "offer"}
+        ]
+        if resolved_country:
+            columns.append({"column": "country"})
+        
+        # Build filters
+        filters = [
             {
-                "offer_url_name": "Summer Sale LP v2",
-                "conversion_rate": 4.85,
-                "clicks": 12450,
-                "conversions": 604
-            },
-            {
-                "offer_url_name": "Summer Sale LP v1",
-                "conversion_rate": 3.92,
-                "clicks": 8230,
-                "conversions": 323
-            },
-            {
-                "offer_url_name": "Generic Offer Page",
-                "conversion_rate": 2.15,
-                "clicks": 5100,
-                "conversions": 110
+                "resource_type": "offer",
+                "filter_id_value": str(resolved_offer_id)
             }
-        ],
-        "_format_hint": "table"  # Hint for agent to format as table
-    })
+        ]
+        
+        if resolved_country:
+            filters.append({
+                "resource_type": "country",
+                "filter_id_value": resolved_country
+            })
+        
+        if label:
+            filters.append({
+                "resource_type": "label",
+                "filter_id_value": label
+            })
+        
+        # Build payload
+        # Note: currency_id is required for entity reporting endpoint
+        payload = {
+            "columns": columns,
+            "query": {"filters": filters},
+            "from": from_date.strftime("%Y-%m-%d"),
+            "to": to_date.strftime("%Y-%m-%d"),
+            "timezone_id": client.timezone_id,
+            "currency_id": "EUR"  # Required field for entity reporting
+        }
+        
+        # Debug: Print payload for troubleshooting
+        print(f"🔍 WF2 API Payload: {json.dumps(payload, indent=2)}")
+        
+        # Make API call
+        try:
+            response = client._request("POST", "/v1/networks/reporting/entity", data=payload)
+            table = response.get("table", [])
+            print(f"✅ API Response: {len(table)} rows returned")
+        except Exception as api_error:
+            error_msg = str(api_error)
+            # Try to get more details from the exception
+            if hasattr(api_error, 'response'):
+                if hasattr(api_error.response, 'status_code'):
+                    error_msg += f" (Status: {api_error.response.status_code})"
+                if hasattr(api_error.response, 'text'):
+                    try:
+                        error_json = api_error.response.json()
+                        error_msg += f"\nAPI Error Details: {json.dumps(error_json, indent=2)}"
+                    except:
+                        error_msg += f"\nAPI Response: {api_error.response.text}"
+            print(f"❌ API Error: {error_msg}")
+            print(f"❌ Payload sent: {json.dumps(payload, indent=2)}")
+            
+            # Return user-friendly error message
+            if "400" in error_msg or "Bad Request" in error_msg:
+                # Check if it's an "Internal error" from the API (server-side issue)
+                if "Internal error" in error_msg:
+                    return json.dumps({
+                        "status": "error",
+                        "message": "The Everflow API entity reporting endpoint is currently returning an internal error. This appears to be an issue with the Everflow API service itself, not your request. Please:\n1. Try again in a few moments\n2. Check if your Everflow account has access to the entity reporting endpoint\n3. Contact Everflow support if the issue persists\n\nNote: The API key is working (other endpoints respond correctly), but the entity reporting endpoint specifically has an issue."
+                    })
+                return json.dumps({
+                    "status": "error",
+                    "message": f"Invalid request to Everflow API. Please check the offer name and date range. Error details: {error_msg}"
+                })
+            return json.dumps({
+                "status": "error",
+                "message": f"Failed to fetch landing page data from Everflow API: {error_msg}"
+            })
+        
+        # Process results
+        # Note: Everflow API returns data in a nested structure:
+        # - row["columns"] contains column data (offer_url, offer, etc.)
+        # - row["reporting"] contains metrics (clicks, conversions, cvr, etc.)
+        processed_lps = []
+        for row in table:
+            # Extract reporting metrics
+            reporting = row.get("reporting", {})
+            clicks = reporting.get("total_click", 0) or reporting.get("clicks", 0)
+            conversions = reporting.get("cv", 0) or reporting.get("total_cv", 0) or reporting.get("conversions", 0)
+            # CVR is already calculated by API (as percentage, e.g., 1.003 = 1.003%)
+            cvr = reporting.get("cvr", 0.0)
+            
+            # Filter by minimum conversions
+            if conversions < min_leads:
+                continue
+            
+            # Extract landing page info from columns array
+            lp_id = None
+            lp_name = "Unknown Landing Page"
+            
+            columns = row.get("columns", [])
+            for col in columns:
+                if col.get("column_type") == "offer_url":
+                    lp_id = col.get("id")
+                    lp_name = col.get("label", f"LP {lp_id}")
+                    break
+            
+            # If no offer_url column found, try to get from row directly
+            if not lp_id:
+                lp_id = row.get("offer_url_id")
+                lp_name = row.get("offer_url_name") or row.get("offer_url") or f"LP {lp_id or 'Unknown'}"
+            
+            processed_lps.append({
+                "offer_url_id": lp_id,
+                "offer_url_name": lp_name,
+                "clicks": int(clicks),
+                "conversions": int(conversions),
+                "conversion_rate": round(cvr, 2)  # API already provides CVR as percentage
+            })
+        
+        # Sort by conversion rate (descending)
+        processed_lps.sort(key=lambda x: x["conversion_rate"], reverse=True)
+        
+        # Return top N
+        top_lps = processed_lps[:top_n]
+        
+        if not top_lps:
+            return json.dumps({
+                "status": "error",
+                "message": f"No landing pages found for Offer {resolved_offer_id} with at least {min_leads} conversions in the last {days} days."
+            })
+        
+        return json.dumps({
+            "status": "success",
+            "offer_id": resolved_offer_id,
+            "country_code": resolved_country,
+            "period_days": days,
+            "top_lps": top_lps,
+            "_format_hint": "table"  # Hint for agent to format as table
+        })
+        
+    except Exception as e:
+        print(f"Error fetching landing pages from Everflow API: {str(e)}")
+        return json.dumps({
+            "status": "error",
+            "message": f"Failed to fetch landing page data from Everflow API: {str(e)}"
+        })
 
 
 @tool

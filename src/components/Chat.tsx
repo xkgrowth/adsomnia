@@ -93,7 +93,7 @@ const generateExampleQueries = (affiliates: Affiliate[], offers: Offer[]): Examp
     {
       category: "WF2: Identify Top-Performing Landing Pages",
       queries: [
-        // Exact match to user's manual process
+        // Exact match to user's manual process - Matchaora offer
         `Show me top landing pages for Matchaora - IT - DOI - (Responsive) year to date with conversions greater than 50 and Advertiser_Internal label`,
       ],
     },
@@ -189,11 +189,52 @@ export default function Chat() {
 
   // Parse report data from LLM response (detect markdown tables)
   const parseReportData = (content: string): ReportData | null => {
-    // Look for markdown tables in the response
-    const tableRegex = /\|(.+)\|\n\|[-\s|]+\|\n((?:\|.+\|\n?)+)/g;
+    // Look for markdown tables in the response - more flexible regex
+    // Matches: header row, separator row (with dashes), and data rows
+    const tableRegex = /\|(.+)\|\s*\n\s*\|[-\s|:]+\|\s*\n((?:\|.+\|\s*\n?)+)/g;
     const matches = Array.from(content.matchAll(tableRegex));
     
-    if (matches.length === 0) return null;
+    if (matches.length === 0) {
+      // Try alternative format without separator row
+      const altRegex = /\|(.+)\|\s*\n((?:\|.+\|\s*\n?)+)/g;
+      const altMatches = Array.from(content.matchAll(altRegex));
+      if (altMatches.length > 0) {
+        // Use first alternative match
+        const match = altMatches[0];
+        const headerRow = match[1];
+        const dataRows = match[2].trim().split('\n').filter(row => row.trim().startsWith('|'));
+        
+        if (dataRows.length > 0) {
+          const columns = headerRow
+            .split('|')
+            .map((col) => col.trim())
+            .filter((col) => col.length > 0);
+          
+          const rows: ReportRow[] = dataRows.map((row, index) => {
+            const cells = row
+              .split('|')
+              .map((cell) => cell.trim())
+              .filter((cell) => cell.length > 0);
+            
+            const rowData: ReportRow = {
+              id: `row-${index}`,
+            };
+            
+            columns.forEach((col, colIndex) => {
+              rowData[col] = cells[colIndex] || '';
+            });
+            
+            return rowData;
+          });
+          
+          return {
+            columns: columns.map(col => ({ key: col, label: col, sortable: true })),
+            rows,
+          };
+        }
+      }
+      return null;
+    }
 
     // Use the first table found
     const match = matches[0];
@@ -308,6 +349,22 @@ export default function Chat() {
       const reportData = parseReportData(response.response);
       const hasReport = hasReportData(response.response);
 
+      // Extract date range from response if available
+      let dateRange = 'last 30 days';
+      if (response.response.toLowerCase().includes('year to date') || response.response.toLowerCase().includes('ytd')) {
+        dateRange = 'year to date';
+      } else if (response.response.toLowerCase().includes('last week')) {
+        dateRange = 'last week';
+      } else if (response.response.toLowerCase().includes('last month')) {
+        dateRange = 'last month';
+      }
+
+      // Extract report type from response
+      let reportType = 'stats';
+      if (response.response.toLowerCase().includes('landing page')) {
+        reportType = 'landing_pages';
+      }
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
@@ -315,8 +372,8 @@ export default function Chat() {
         timestamp: new Date(),
         reportData: reportData || undefined,
         reportMetadata: hasReport ? {
-          reportType: 'stats', // Default, could be extracted from response
-          dateRange: 'last 30 days', // Default, could be extracted from response
+          reportType: reportType,
+          dateRange: dateRange,
         } : undefined,
       };
       

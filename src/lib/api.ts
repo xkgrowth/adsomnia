@@ -23,26 +23,83 @@ export async function sendChatMessage(
   message: string,
   threadId?: string
 ): Promise<ChatResponse> {
+  console.log('sendChatMessage: Starting', { 
+    API_BASE_URL, 
+    message: message.substring(0, 50) + '...',
+    threadId 
+  });
+  
   try {
-    const response = await fetch(`${API_BASE_URL}/api/chat/query`, {
+    const requestBody = {
+      message,
+      thread_id: threadId,
+    };
+    
+    console.log('sendChatMessage: Making fetch request', {
+      url: `${API_BASE_URL}/api/chat/query`,
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-API-Key': API_KEY,
-      },
-      body: JSON.stringify({
-        message,
-        thread_id: threadId,
-      }),
+      hasApiKey: !!API_KEY,
+    });
+    
+    // Add timeout to fetch request (60 seconds for LLM calls)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.error('sendChatMessage: Request timeout after 60 seconds');
+      controller.abort();
+    }, 60000); // 60 second timeout
+    
+    let response;
+    try {
+      response = await fetch(`${API_BASE_URL}/api/chat/query`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': API_KEY,
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        throw new Error('Request timeout: The server took too long to respond. Please try again.');
+      }
+      throw fetchError;
+    }
+
+    console.log('sendChatMessage: Response received', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
     });
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+      const errorText = await response.text();
+      console.error('sendChatMessage: Error response', {
+        status: response.status,
+        errorText,
+      });
+      
+      let error;
+      try {
+        error = JSON.parse(errorText);
+      } catch {
+        error = { detail: errorText || 'Unknown error' };
+      }
+      
       throw new Error(error.detail || `HTTP ${response.status}`);
     }
 
-    return await response.json();
+    const data = await response.json();
+    console.log('sendChatMessage: Success', {
+      responseLength: data.response?.length || 0,
+      hasThreadId: !!data.thread_id,
+    });
+    
+    return data;
   } catch (error) {
+    console.error('sendChatMessage: Exception caught', error);
     if (error instanceof Error) {
       throw error;
     }

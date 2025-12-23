@@ -49,7 +49,8 @@ class EntityResolver:
         
         # Try to fetch from API - use ALL affiliate fields from response
         try:
-            affiliates = self.client.get_affiliates(limit=200)
+            # Fetch ALL affiliates (no limit) to ensure we find the one we're looking for
+            affiliates = self.client.get_affiliates(limit=None)
             for aff in affiliates:
                 aff_id = aff.get("affiliate_id")
                 if not aff_id:
@@ -110,6 +111,14 @@ class EntityResolver:
         # Normalize input name
         search_name = str(value).strip().lower()
         
+        # Helper function to normalize brackets/parentheses and special chars for matching
+        def normalize_for_matching(text: str) -> str:
+            """Normalize text by replacing brackets/parentheses and removing extra spaces."""
+            # Replace brackets and parentheses with a standard character for matching
+            text = text.replace('[', '(').replace(']', ')')
+            # Remove extra spaces
+            return ' '.join(text.split())
+        
         # Check cache first
         if search_name in self._offer_cache:
             return self._offer_cache[search_name]
@@ -123,7 +132,10 @@ class EntityResolver:
         # Try to fetch from API - use ALL offer fields from response
         # Note: Everflow API returns offer_name, advertiser_name, offer fields
         try:
-            offers = self.client.get_offers(limit=200)
+            # Fetch ALL offers (no limit) to ensure we find the one we're looking for
+            offers = self.client.get_offers(limit=None)
+            print(f"🔍 Searching for offer: '{value}' (normalized: '{search_name}') in {len(offers)} offers")
+            
             for offer in offers:
                 offer_id = offer.get("offer_id")
                 if not offer_id:
@@ -137,6 +149,7 @@ class EntityResolver:
                     offer.get("advertiser", ""),
                     offer.get("offer", ""),
                     # Check raw data if available
+                    offer.get("_raw", {}).get("name", ""),  # API returns "name" in raw data
                     offer.get("_raw", {}).get("offer_name", ""),
                     offer.get("_raw", {}).get("advertiser_name", ""),
                     offer.get("_raw", {}).get("advertiser", ""),
@@ -151,6 +164,7 @@ class EntityResolver:
                     
                     # Exact match
                     if name_lower == search_name:
+                        print(f"✅ Exact match found: Offer ID {offer_id} = '{name}'")
                         # Check for duplicate names (many-to-one issue)
                         if search_name in self._offer_cache and self._offer_cache[search_name] != offer_id:
                             print(f"⚠️  WARNING: Duplicate offer name '{value}' found! IDs: {self._offer_cache[search_name]}, {offer_id}")
@@ -158,13 +172,54 @@ class EntityResolver:
                         self._offer_cache[search_name] = offer_id
                         return offer_id
                     
-                    # Partial match (name contains search term or vice versa)
-                    if search_name in name_lower or name_lower in search_name:
-                        # Check for duplicate names
+                    # Normalize both for better matching (normalize brackets/parentheses, remove extra spaces)
+                    search_normalized = normalize_for_matching(search_name)
+                    name_normalized = normalize_for_matching(name_lower)
+                    
+                    # Exact match after normalization
+                    if search_normalized == name_normalized:
+                        print(f"✅ Normalized match found: Offer ID {offer_id} = '{name}' (normalized: '{name_normalized}')")
                         if search_name in self._offer_cache and self._offer_cache[search_name] != offer_id:
                             print(f"⚠️  WARNING: Duplicate offer name '{value}' found! IDs: {self._offer_cache[search_name]}, {offer_id}")
                         self._offer_cache[search_name] = offer_id
                         return offer_id
+                    
+                    # Partial match (search name in offer name) - check if key words match
+                    if search_normalized in name_normalized:
+                        print(f"✅ Partial match (search in name) found: Offer ID {offer_id} = '{name}'")
+                        if search_name in self._offer_cache and self._offer_cache[search_name] != offer_id:
+                            print(f"⚠️  WARNING: Duplicate offer name '{value}' found! IDs: {self._offer_cache[search_name]}, {offer_id}")
+                        self._offer_cache[search_name] = offer_id
+                        return offer_id
+                    
+                    # Partial match (offer name in search name)
+                    if name_normalized in search_normalized:
+                        print(f"✅ Partial match (name in search) found: Offer ID {offer_id} = '{name}'")
+                        if search_name in self._offer_cache and self._offer_cache[search_name] != offer_id:
+                            print(f"⚠️  WARNING: Duplicate offer name '{value}' found! IDs: {self._offer_cache[search_name]}, {offer_id}")
+                        self._offer_cache[search_name] = offer_id
+                        return offer_id
+                    
+                    # Word-based matching: if all significant words in search_name appear in name
+                    search_words = [w for w in search_normalized.split() if len(w) > 2]  # Ignore short words like "it", "do", etc.
+                    if search_words and all(word in name_normalized for word in search_words):
+                        print(f"✅ Word-based match found: Offer ID {offer_id} = '{name}' (all words: {search_words})")
+                        if search_name in self._offer_cache and self._offer_cache[search_name] != offer_id:
+                            print(f"⚠️  WARNING: Duplicate offer name '{value}' found! IDs: {self._offer_cache[search_name]}, {offer_id}")
+                        self._offer_cache[search_name] = offer_id
+                        return offer_id
+                    
+                    # First word matching: if the first significant word matches (e.g., "Matchaora" matches "Matchaora - IT - DOI")
+                    if search_words:
+                        first_word = search_words[0]
+                        name_words = [w for w in name_normalized.split() if len(w) > 2]
+                        if name_words and first_word == name_words[0]:
+                            # First word matches, this is likely the same offer
+                            print(f"✅ First word match found: Offer ID {offer_id} = '{name}' (first word: '{first_word}')")
+                            if search_name in self._offer_cache and self._offer_cache[search_name] != offer_id:
+                                print(f"⚠️  WARNING: Duplicate offer name '{value}' found! IDs: {self._offer_cache[search_name]}, {offer_id}")
+                            self._offer_cache[search_name] = offer_id
+                            return offer_id
         except Exception as e:
             print(f"API lookup failed for offer '{value}': {str(e)}")
             pass  # Fall back to test data

@@ -95,3 +95,4 @@ async def get_all_entities(
             detail=f"Failed to fetch entities: {str(e)}"
         )
 
+
