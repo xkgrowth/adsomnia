@@ -107,3 +107,105 @@ export async function fetchEntities(): Promise<EntitiesResponse> {
   }
 }
 
+// Report-related interfaces and functions
+export interface ReportData {
+  columns: string[];
+  rows: Array<Record<string, any>>;
+  metadata?: {
+    reportType?: string;
+    dateRange?: string;
+    parentColumn?: string;
+    childColumn?: string;
+  };
+}
+
+export interface ExportRequest {
+  report_type: string;
+  date_range: string;
+  columns?: string[];
+  filters?: Record<string, any>;
+  selected_rows?: string[]; // Row IDs to export
+}
+
+export interface ExportResponse {
+  status: string;
+  download_url?: string;
+  expires_in?: number;
+  message?: string;
+}
+
+/**
+ * Fetch report data for viewing in modal
+ */
+export async function fetchReportData(
+  reportType: string,
+  dateRange: string,
+  filters?: Record<string, any>
+): Promise<ReportData> {
+  try {
+    // This would call a backend endpoint that returns structured report data
+    // For now, we'll use the export endpoint but request JSON format
+    const response = await fetch(`${API_BASE_URL}/api/workflows/wf3/export-report`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': API_KEY,
+      },
+      body: JSON.stringify({
+        report_type: reportType,
+        date_range: dateRange,
+        filters: filters,
+        format: 'json', // Request JSON instead of CSV for viewing
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Failed to fetch report data');
+  }
+}
+
+/**
+ * Export report as CSV with selected fields and rows
+ */
+export async function exportReportCSV(
+  request: ExportRequest
+): Promise<ExportResponse> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/workflows/wf3/export-report`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': API_KEY,
+      },
+      body: JSON.stringify({
+        report_type: request.report_type,
+        date_range: request.date_range,
+        columns: request.columns,
+        filters: request.filters,
+        selected_rows: request.selected_rows,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('Failed to export report');
+  }
+}
+

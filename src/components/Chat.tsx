@@ -1,18 +1,31 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { sendChatMessage, fetchEntities, type Affiliate, type Offer } from "@/lib/api";
+import { sendChatMessage, fetchEntities, exportReportCSV, type Affiliate, type Offer, type ReportData, type ExportRequest } from "@/lib/api";
+import ReportModal, { type ReportRow } from "./ReportModal";
 
 type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  reportData?: ReportData; // Optional report data for this message
+  reportMetadata?: {
+    reportType?: string;
+    dateRange?: string;
+    filters?: Record<string, any>;
+  };
+};
+
+type ExampleQuery = {
+  query: string;
+  subheading?: string; // Optional subheading for the query
 };
 
 type ExampleQueryCategory = {
   category: string;
-  queries: string[];
+  queries: (string | ExampleQuery)[];
+  highlightedIndex?: number; // Index of the query to highlight
 };
 
 // Get real IDs from environment variables if available, otherwise use test data
@@ -82,30 +95,34 @@ const generateExampleQueries = (affiliates: Affiliate[], offers: Offer[]): Examp
       queries: [
         // Exact match to user's manual process
         `Show me top landing pages for Matchaora - IT - DOI - (Responsive) year to date with conversions greater than 50 and Advertiser_Internal label`,
-        
-        // Variations with different offers
-        offer1 ? `Which landing pages perform best for ${offer1.offer_name} year to date with conversions greater than 50?` : "Which landing pages perform best for Summer Promo 2024 year to date with conversions greater than 50?",
-        offer2 ? `Top performing landing pages for ${offer2.offer_name} with Advertiser_Internal label and CV greater than 50` : "Top performing landing pages for Holiday Special with Advertiser_Internal label and CV greater than 50",
-        offer3 ? `Show me best converting landing pages for ${offer3.offer_name} year to date` : "Show me best converting landing pages for Instantplaymate year to date",
-        
-        // Different date ranges
-        offer1 ? `Top landing pages for ${offer1.offer_name} in the last 30 days with conversions greater than 50` : "Top landing pages for Summer Promo 2024 in the last 30 days with conversions greater than 50",
-        offer2 ? `Which landing pages work best for ${offer2.offer_name} last week?` : "Which landing pages work best for Holiday Special last week?",
-        
-        // Different metrics and filters
-        offer1 ? `Show me landing pages for ${offer1.offer_name} with highest conversion rate year to date` : "Show me landing pages for Summer Promo 2024 with highest conversion rate year to date",
-        offer3 ? `Top 5 landing pages for ${offer3.offer_name} with Advertiser_Internal label and minimum 100 conversions` : "Top 5 landing pages for Instantplaymate with Advertiser_Internal label and minimum 100 conversions",
       ],
     },
     {
       category: "WF3: Search, Compile, and Export Reports",
       queries: [
-        "Export fraud report for last week",
-        offer1 ? `Download conversion data for ${offer1.offer_name} from December` : "Download conversion data for Summer Promo 2024 from December",
-        "Get me a CSV of conversions with tracking parameters for last month",
-        offer1 ? `Export stats for ${offer1.offer_name} from November 1st to 15th` : "Export stats for Summer Promo 2024 from November 1st to 15th",
-        "Pull a scrub analysis report for the past 7 days",
-        "Export conversion report with sub1, sub2, and affiliate columns for last 30 days",
+        // WF3.1: Conversion report (Fraud detection)
+        {
+          subheading: "WF3.1: Conversion Report (Fraud Detection)",
+          query: "Show me conversion report for fraud detection for Papoaolado - BR - DOI - (responsive) with partner iMonetizeIt and source ID 134505 for last month",
+        },
+        
+        // WF3.2: Variance Report
+        {
+          subheading: "WF3.2: Variance Report",
+          query: "Show me variance report for this week with parent Partner and child Offer",
+        },
+        
+        // WF3.3: Check Average EPC per offer
+        {
+          subheading: "WF3.3: Check Average EPC per Offer",
+          query: "Check average EPC per offer for Matchaora - IT - DOI - (Responsive) with Traffic_FB label and conversions greater than or equal to 50 for last week",
+        },
+        
+        // WF3.4: Check CR Drop
+        {
+          subheading: "WF3.4: Check CR Drop",
+          query: "Check conversion rate drop comparing one week versus another week for offers with Advertiser_Internal and Partner_external labels",
+        },
       ],
     },
   ];
@@ -120,6 +137,8 @@ export default function Chat() {
   const [affiliates, setAffiliates] = useState<Affiliate[]>(FALLBACK_AFFILIATES);
   const [offers, setOffers] = useState<Offer[]>(FALLBACK_OFFERS);
   const [entitiesLoading, setEntitiesLoading] = useState(true);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [currentReportData, setCurrentReportData] = useState<ReportData | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -168,6 +187,92 @@ export default function Chat() {
     scrollToBottom();
   }, [messages]);
 
+  // Parse report data from LLM response (detect markdown tables)
+  const parseReportData = (content: string): ReportData | null => {
+    // Look for markdown tables in the response
+    const tableRegex = /\|(.+)\|\n\|[-\s|]+\|\n((?:\|.+\|\n?)+)/g;
+    const matches = Array.from(content.matchAll(tableRegex));
+    
+    if (matches.length === 0) return null;
+
+    // Use the first table found
+    const match = matches[0];
+    const headerRow = match[1];
+    const dataRows = match[2].trim().split('\n');
+
+    // Parse columns from header
+    const columns = headerRow
+      .split('|')
+      .map((col) => col.trim())
+      .filter((col) => col.length > 0);
+
+    // Parse data rows
+    const rows: ReportRow[] = dataRows.map((row, index) => {
+      const cells = row
+        .split('|')
+        .map((cell) => cell.trim())
+        .filter((cell) => cell.length > 0);
+
+      const rowData: ReportRow = {
+        id: `row-${index}`,
+      };
+
+      columns.forEach((col, colIndex) => {
+        rowData[col] = cells[colIndex] || '';
+      });
+
+      return rowData;
+    });
+
+    return {
+      columns,
+      rows,
+    };
+  };
+
+  // Detect if response contains report data
+  const hasReportData = (content: string): boolean => {
+    // Check for markdown tables or report indicators
+    return /\|.+\|/.test(content) || 
+           /report|table|data|export/i.test(content);
+  };
+
+  const handleViewReport = (message: Message) => {
+    if (message.reportData) {
+      setCurrentReportData(message.reportData);
+      setReportModalOpen(true);
+    }
+  };
+
+  const handleExportReport = async (
+    selectedRows: ReportRow[],
+    selectedColumns: string[]
+  ) => {
+    if (!currentReportData || !currentReportData.metadata) return;
+
+    try {
+      const exportRequest: ExportRequest = {
+        report_type: currentReportData.metadata.reportType || 'stats',
+        date_range: currentReportData.metadata.dateRange || 'last 30 days',
+        columns: selectedColumns,
+        filters: currentReportData.metadata.filters,
+        selected_rows: selectedRows.map((row) => row.id),
+      };
+
+      const response = await exportReportCSV(exportRequest);
+
+      if (response.download_url) {
+        // Open download link in new tab
+        window.open(response.download_url, '_blank');
+      } else {
+        alert('Export failed: ' + (response.message || 'Unknown error'));
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to export report';
+      alert('Export error: ' + errorMessage);
+    }
+  };
+
   const submitMessage = async (messageContent: string) => {
     if (!messageContent.trim() || isLoading) return;
 
@@ -192,11 +297,20 @@ export default function Chat() {
         setThreadId(response.thread_id);
       }
 
+      // Parse report data from response
+      const reportData = parseReportData(response.response);
+      const hasReport = hasReportData(response.response);
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
         content: response.response,
         timestamp: new Date(),
+        reportData: reportData || undefined,
+        reportMetadata: hasReport ? {
+          reportType: 'stats', // Default, could be extracted from response
+          dateRange: 'last 30 days', // Default, could be extracted from response
+        } : undefined,
       };
       
       setMessages((prev) => [...prev, assistantMessage]);
@@ -274,16 +388,32 @@ export default function Chat() {
                       <div className="text-xs font-semibold text-accent-yellow uppercase tracking-wide mb-2">
                         {category.category}
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        {category.queries.map((query, qIdx) => (
-                          <button
-                            key={qIdx}
-                            onClick={() => handleExampleClick(query)}
-                            className="text-xs px-3 py-1.5 border border-border bg-bg-tertiary hover:bg-bg-secondary hover:border-accent-yellow text-text-primary transition-colors rounded cursor-pointer"
-                          >
-                            {query}
-                          </button>
-                        ))}
+                      <div className="space-y-3">
+                        {category.queries.map((queryItem, qIdx) => {
+                          const queryObj = typeof queryItem === 'string' ? { query: queryItem } : queryItem;
+                          const { query, subheading } = queryObj;
+                          const isHighlighted = category.highlightedIndex === qIdx;
+                          
+                          return (
+                            <div key={qIdx} className="space-y-1.5">
+                              {subheading && (
+                                <div className="text-xs font-medium text-text-secondary uppercase tracking-wide">
+                                  {subheading}
+                                </div>
+                              )}
+                              <button
+                                onClick={() => handleExampleClick(query)}
+                                className={`text-xs px-3 py-1.5 border transition-colors rounded cursor-pointer ${
+                                  isHighlighted
+                                    ? "border-accent-yellow bg-bg-secondary font-semibold text-accent-yellow hover:bg-bg-tertiary"
+                                    : "border-border bg-bg-tertiary hover:bg-bg-secondary hover:border-accent-yellow text-text-primary"
+                                }`}
+                              >
+                                {query}
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   ))}
@@ -318,6 +448,17 @@ export default function Chat() {
                   <div className="text-sm leading-relaxed text-text-primary whitespace-pre-wrap">
                     {formatContent(message.content)}
                   </div>
+                  {/* View Report Button */}
+                  {message.reportData && (
+                    <div className="mt-3">
+                      <button
+                        onClick={() => handleViewReport(message)}
+                        className="btn-primary px-4 py-2 text-xs"
+                      >
+                        View Report
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
@@ -397,6 +538,19 @@ export default function Chat() {
           ENTER TO SEND • SHIFT+ENTER FOR NEW LINE
         </p>
       </div>
+
+      {/* Report Modal */}
+      {currentReportData && (
+        <ReportModal
+          isOpen={reportModalOpen}
+          onClose={() => {
+            setReportModalOpen(false);
+            setCurrentReportData(null);
+          }}
+          data={currentReportData}
+          onExport={handleExportReport}
+        />
+      )}
     </div>
   );
 }
