@@ -179,3 +179,4 @@ The frontend is ready, but the backend needs updates to fully support these feat
 - Report data parsing currently works with markdown tables from LLM responses
 - Future: Could enhance to parse structured JSON from backend directly
 
+

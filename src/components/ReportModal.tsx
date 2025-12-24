@@ -338,6 +338,8 @@ function ExportFieldSelector({
   // Get all available Everflow export fields
   const allExportFields = getAvailableExportFields(reportType);
   const fieldsByCategory = getFieldsByCategory(allExportFields);
+  const [customFields, setCustomFields] = useState<string>("");
+  const [showCustomInput, setShowCustomInput] = useState(false);
   
   // Map table column names to export field IDs
   // Table shows: "Offer", "Offer URL", "CV", "CVR", "EPC", "RPC", "Payout"
@@ -402,8 +404,36 @@ function ExportFieldSelector({
   };
 
   const handleExport = () => {
-    if (selectedColumns.size > 0) {
-      onExport(Array.from(selectedColumns));
+    // Combine selected fields from list and custom fields
+    // Preserve order by using array instead of Set
+    const selectedFields: string[] = [];
+    const seen = new Set<string>();
+    
+    // Add selected columns in order (Set iteration preserves insertion order)
+    selectedColumns.forEach(field => {
+      if (!seen.has(field)) {
+        selectedFields.push(field);
+        seen.add(field);
+      }
+    });
+    
+    // Parse custom fields (comma or newline separated) and add in order
+    if (customFields.trim()) {
+      const customFieldsList = customFields
+        .split(/[,\n]/)
+        .map(field => field.trim())
+        .filter(field => field.length > 0);
+      
+      customFieldsList.forEach(field => {
+        if (!seen.has(field)) {
+          selectedFields.push(field);
+          seen.add(field);
+        }
+      });
+    }
+    
+    if (selectedFields.length > 0) {
+      onExport(selectedFields);
     }
   };
 
@@ -434,6 +464,36 @@ function ExportFieldSelector({
           </p>
 
           <div className="space-y-4">
+            {/* Custom Fields Input */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-semibold text-accent-yellow uppercase tracking-wider">
+                  Custom Fields
+                </h4>
+                <button
+                  onClick={() => setShowCustomInput(!showCustomInput)}
+                  className="text-xs text-text-secondary hover:text-accent-yellow transition-colors"
+                >
+                  {showCustomInput ? "Hide" : "Add Custom Fields"}
+                </button>
+              </div>
+              {showCustomInput && (
+                <div className="mb-4">
+                  <textarea
+                    value={customFields}
+                    onChange={(e) => setCustomFields(e.target.value)}
+                    placeholder="Enter custom field names (comma or newline separated)&#10;Example: custom_field_1, custom_metric, another_field"
+                    className="w-full px-3 py-2 bg-bg-tertiary border border-border text-text-primary placeholder:text-text-muted text-sm focus:outline-none focus:border-accent-yellow transition-colors font-mono text-xs resize-none"
+                    rows={3}
+                  />
+                  <p className="text-xs text-text-secondary mt-1">
+                    Enter any Everflow API field names. These will be included in the export along with selected fields above.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Predefined Fields by Category */}
             {Object.entries(fieldsByCategory).map(([category, fields]) => (
               <div key={category}>
                 <h4 className="text-xs font-semibold text-accent-yellow uppercase tracking-wider mb-2">
@@ -478,7 +538,7 @@ function ExportFieldSelector({
           </button>
           <button
             onClick={handleExport}
-            disabled={selectedColumns.size === 0}
+            disabled={selectedColumns.size === 0 && !customFields.trim()}
             className="btn-primary px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Export CSV

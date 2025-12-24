@@ -46,3 +46,4 @@ Check your browser console (F12) to see:
 - `⚠️ No affiliates returned from API` - Confirms fallback is being used
 
 
+

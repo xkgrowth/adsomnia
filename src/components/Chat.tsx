@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useImperativeHandle, forwardRef } from "re
 import { sendChatMessage, fetchEntities, exportReportCSV, type Affiliate, type Offer, type ReportData, type ExportRequest, fetchConversions, updateConversionStatus, bulkUpdateConversionStatus, type FetchConversionsResponse } from "@/lib/api";
 import ReportModal, { type ReportRow } from "./ReportModal";
 import ConversionReportModal, { type ConversionRecord, type ConversionReportData } from "./ConversionReportModal";
+import { getAvailableExportFields } from "@/lib/everflowFields";
 
 type Message = {
   id: string;
@@ -689,13 +690,219 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
         selected_rows: selectedRows.map((row) => row.id),
       };
 
-      const response = await exportReportCSV(exportRequest);
-
-      if (response.download_url) {
-        // Open download link in new tab
-        window.open(response.download_url, '_blank');
+      // Generate CSV from current report data for immediate download
+      // This works even if backend returns a mock URL
+      if (currentReportData && currentReportData.rows.length > 0) {
+        // Filter rows if specific rows are selected
+        const rowsToExport = selectedRows.length > 0 
+          ? currentReportData.rows.filter(row => selectedRows.some(selected => selected.id === row.id))
+          : currentReportData.rows;
+        
+        // Map field IDs to actual column names in the data
+        // The reverse mapping from export selector field IDs to display column names
+        // Note: Some fields like "offer_id" might not exist as separate columns in the data
+        // In that case, we'll try to extract the ID from the "Offer" column or leave it empty
+        const fieldIdToColumnName: Record<string, string> = {
+          "offer": "Offer",           // Maps to "Offer" column (contains name, might contain ID too)
+          "offer_id": "Offer",        // Also maps to "Offer" - we'll extract ID if possible
+          "offer_name": "Offer",      // Maps to "Offer" column
+          "offer_url": "Offer URL",
+          "offer_url_id": "Offer URL",
+          "offer_url_name": "Offer URL",
+          "affiliate": "Partner",
+          "affiliate_id": "Partner",
+          "affiliate_name": "Partner",
+          "cv": "CV",
+          "cvr": "CVR",
+          "epc": "EPC",
+          "rpc": "RPC",
+          "payout": "Payout",
+          "revenue": "Revenue",
+          "clicks": "Clicks",
+          "profit": "Profit",
+          "conversions": "CV",
+          "conversion_rate": "CVR",
+          "landing_page": "Offer URL",
+        };
+        
+        // Determine which columns to export and in what order
+        // Preserve the order from the modal (field list order, not selection order)
+        let columnsToExport: string[] = [];
+        let columnHeaders: string[] = [];
+        
+        if (selectedColumns.length > 0) {
+          // Get the field list to determine the order
+          const allFields = getAvailableExportFields(reportType);
+          
+          // Track which columns we've already added
+          const addedColumns = new Set<string>();
+          const addedFieldIds = new Set<string>();
+          
+          // Sort selected columns by their order in the field list
+          const selectedFieldsOrdered = [...selectedColumns].sort((a, b) => {
+            const indexA = allFields.findIndex(f => f.id === a);
+            const indexB = allFields.findIndex(f => f.id === b);
+            // If not found in list, put at end
+            if (indexA === -1) return 1;
+            if (indexB === -1) return -1;
+            return indexA - indexB;
+          });
+          
+          // Process in the order they appear in the field list
+          selectedFieldsOrdered.forEach(fieldId => {
+            // Always include each selected field ID as a separate column
+            // Even if multiple field IDs map to the same data column
+            columnsToExport.push(fieldId); // Use field ID as the key for extraction
+            columnHeaders.push(fieldId); // Use field ID as header
+            addedFieldIds.add(fieldId);
+          });
+        } else {
+          // Use all available columns
+          columnsToExport = currentReportData.columns;
+          columnHeaders = currentReportData.columns;
+        }
+        
+        // Generate CSV content
+        const csvRows: string[] = [];
+        
+        // Add header row (use field IDs as headers for clarity)
+        csvRows.push(columnHeaders.map(col => `"${col}"`).join(','));
+        
+        // Add data rows
+        rowsToExport.forEach(row => {
+          const values = columnsToExport.map(fieldId => {
+            // Check if this is a field ID that needs special handling
+            const mappedColumn = fieldIdToColumnName[fieldId.toLowerCase()];
+            
+            // Try multiple strategies to find the value
+            let value: any = undefined;
+            
+            // Strategy 1: If it's a mapped field ID, try to get from mapped column first
+            if (mappedColumn && currentReportData.columns.includes(mappedColumn)) {
+              value = row[mappedColumn];
+              
+              // Special handling for offer_id - try to extract ID
+              if (fieldId.toLowerCase() === 'offer_id') {
+                // Try to extract ID from the value (might be "Offer Name (ID: 123)" or just the name)
+                if (value) {
+                  const idMatch = String(value).match(/\(ID:\s*(\d+)\)/i) || String(value).match(/ID:\s*(\d+)/i);
+                  if (idMatch) {
+                    value = idMatch[1];
+                  } else {
+                    // Check if row has offer_id directly
+                    value = row['offer_id'] || row['Offer ID'] || undefined;
+                  }
+                }
+              }
+              // For offer_name, use the mapped column value (offer name)
+              else if (fieldId.toLowerCase() === 'offer_name') {
+                // Use the value from mapped column (which is the offer name)
+                value = value; // Already set above
+              }
+              // For offer, use the mapped column value (offer name)
+              else if (fieldId.toLowerCase() === 'offer') {
+                // Use the value from mapped column (which is the offer name)
+                value = value; // Already set above
+              }
+            }
+            
+            // Strategy 2: Direct key match in row
+            if ((value === undefined || value === null || value === '') && row[fieldId] !== undefined && row[fieldId] !== null && row[fieldId] !== '') {
+              value = row[fieldId];
+            }
+            
+            // Strategy 3: Case-insensitive match
+            if (value === undefined || value === null || value === '') {
+              const caseInsensitiveKey = Object.keys(row).find(k => 
+                k.toLowerCase() === fieldId.toLowerCase()
+              );
+              if (caseInsensitiveKey && row[caseInsensitiveKey] !== undefined && row[caseInsensitiveKey] !== null && row[caseInsensitiveKey] !== '') {
+                value = row[caseInsensitiveKey];
+              }
+            }
+            
+            // Strategy 4: Match with spaces/underscores normalized
+            if (value === undefined || value === null || value === '') {
+              const normalizedKey = Object.keys(row).find(k => 
+                k.toLowerCase().replace(/\s+/g, '_') === fieldId.toLowerCase().replace(/\s+/g, '_')
+              );
+              if (normalizedKey && row[normalizedKey] !== undefined && row[normalizedKey] !== null && row[normalizedKey] !== '') {
+                value = row[normalizedKey];
+              }
+            }
+            
+            // Strategy 5: Partial match (contains)
+            if (value === undefined || value === null || value === '') {
+              const partialKey = Object.keys(row).find(k => 
+                k.toLowerCase().includes(fieldId.toLowerCase()) || 
+                fieldId.toLowerCase().includes(k.toLowerCase().replace(/\s+/g, '_'))
+              );
+              if (partialKey && row[partialKey] !== undefined && row[partialKey] !== null && row[partialKey] !== '') {
+                value = row[partialKey];
+              }
+            }
+            
+            // Handle null/undefined/empty - return empty string for missing fields
+            if (value === null || value === undefined || value === '') {
+              return '""';
+            }
+            
+            // Escape quotes and wrap in quotes
+            const stringValue = String(value).replace(/"/g, '""');
+            return `"${stringValue}"`;
+          });
+          csvRows.push(values.join(','));
+        });
+        
+        // Create blob and download
+        const csvContent = csvRows.join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `export_${reportType}_${Date.now()}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        // Also try to call the backend for future implementation
+        try {
+          await exportReportCSV(exportRequest);
+        } catch (error) {
+          // Backend call failed, but we already downloaded the CSV from current data
+          console.warn('Backend export call failed (using local data):', error);
+        }
       } else {
-        alert('Export failed: ' + (response.message || 'Unknown error'));
+        // Fallback: try backend export
+        const response = await exportReportCSV(exportRequest);
+        if (response.download_url) {
+          // Try to download from URL
+          try {
+            const fileResponse = await fetch(response.download_url, {
+              method: 'GET',
+              mode: 'cors',
+            });
+            
+            if (fileResponse.ok) {
+              const blob = await fileResponse.blob();
+              const url = window.URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = `export_${reportType}_${Date.now()}.csv`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              window.URL.revokeObjectURL(url);
+            } else {
+              alert('Export failed: Unable to download from URL. Please try again.');
+            }
+          } catch (error) {
+            alert('Export failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+          }
+        } else {
+          alert('Export failed: ' + (response.message || 'Unknown error'));
+        }
       }
     } catch (err) {
       let errorMessage = 'Failed to export report';
