@@ -3,9 +3,10 @@
 import { useRef, useState } from "react";
 import Chat, { type ChatHandle, type ChatSession } from "@/components/Chat";
 import RecentChats from "@/components/RecentChats";
+import PasswordProtection from "@/components/PasswordProtection";
 import Link from "next/link";
 
-export default function Home() {
+function HomeContent() {
   const chatRef = useRef<ChatHandle>(null);
   const [recentChatsOpen, setRecentChatsOpen] = useState(false);
 
@@ -96,5 +97,13 @@ export default function Home() {
         onSelectChat={handleSelectChat}
       />
     </main>
+  );
+}
+
+export default function Home() {
+  return (
+    <PasswordProtection>
+      <HomeContent />
+    </PasswordProtection>
   );
 }
