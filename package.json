@@ -1,5 +1,6 @@
 {
   "name": "adsomnia",
+  // Frontend deployment trigger
   "version": "1.0.0",
   "private": true,
   "description": "LLM-powered automation agent for Everflow marketing data",
