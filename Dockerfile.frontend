@@ -16,8 +16,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Set environment variable for API URL
+# Set environment variable for API URL (must be set before build)
 ENV NEXT_PUBLIC_API_URL=https://adsomnia-backend-3naijkhxba-uc.a.run.app
+ENV NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY:-your-secret-api-key-here}
 
 # Build Next.js
 RUN npm run build

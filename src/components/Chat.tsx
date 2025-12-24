@@ -853,7 +853,7 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
       const errorResponse: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: `**Error**\n\n${errorMessage}\n\nPlease check that the API server is running at http://localhost:8000`,
+        content: `**Error**\n\n${errorMessage}\n\nPlease check that the API server is running.`,
         timestamp: new Date(),
       };
       

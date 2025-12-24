@@ -4,8 +4,15 @@
 
 import type { ReportRow } from '@/components/ReportModal';
 
+// Get API URL from environment variable (set at build time for production)
+// Falls back to localhost for local development
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || 'your-secret-api-key-here';
+
+// Log the API URL being used (helpful for debugging)
+if (typeof window !== 'undefined') {
+  console.log('API Base URL:', API_BASE_URL);
+}
 
 export interface ChatRequest {
   message: string;
