@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from typing import Optional
 import sys
+import json
 from pathlib import Path
 
 # Add project root to path
@@ -107,23 +108,50 @@ async def chat_query(
         # Extract the response from the agent's result
         # AgentExecutor returns {"output": "response"} format
         print(f"🔍 Agent result keys: {list(result.keys()) if isinstance(result, dict) else 'not a dict'}")
+        print(f"🔍 Agent result type: {type(result)}")
+        if isinstance(result, dict):
+            print(f"🔍 Agent result full structure: {json.dumps({k: str(type(v)) for k, v in result.items()}, indent=2)}")
+        
+        response_content = None
         
         if "output" in result:
             response_content = result["output"]
             print(f"📝 Using 'output' field, length: {len(str(response_content))}")
+            if len(str(response_content)) > 0:
+                print(f"📝 First 200 chars of output: {str(response_content)[:200]}")
         elif "messages" in result:
-            last_message = result["messages"][-1]
-            response_content = last_message.content if hasattr(last_message, "content") else str(last_message)
-            print(f"📝 Using 'messages' field, length: {len(str(response_content))}")
+            messages = result["messages"]
+            print(f"📝 Found {len(messages)} messages in result")
+            if len(messages) > 0:
+                last_message = messages[-1]
+                print(f"📝 Last message type: {type(last_message)}")
+                if hasattr(last_message, "content"):
+                    response_content = last_message.content
+                    print(f"📝 Using last message content, length: {len(str(response_content))}")
+                    if len(str(response_content)) > 0:
+                        print(f"📝 First 200 chars: {str(response_content)[:200]}")
+                else:
+                    response_content = str(last_message)
+                    print(f"📝 Using str(last_message), length: {len(str(response_content))}")
+            else:
+                print(f"⚠️  Warning: messages array is empty")
         else:
             response_content = str(result)
             print(f"📝 Using str(result), length: {len(str(response_content))}")
+            if len(str(response_content)) > 0:
+                print(f"📝 First 200 chars: {str(response_content)[:200]}")
         
         # Validate response is not empty
         if not response_content or (isinstance(response_content, str) and response_content.strip() == ""):
             print(f"⚠️  Warning: Agent returned empty response. Result structure: {type(result)}")
             if isinstance(result, dict):
                 print(f"⚠️  Result dict contents: {list(result.keys())}")
+                print(f"⚠️  Full result (first 1000 chars): {str(result)[:1000]}")
+            # Try to extract any error information
+            if isinstance(result, dict) and "intermediate_steps" in result:
+                print(f"⚠️  Intermediate steps found: {len(result.get('intermediate_steps', []))}")
+                for i, step in enumerate(result.get('intermediate_steps', [])):
+                    print(f"⚠️  Step {i}: {type(step)}")
             response_content = "I apologize, but I received an empty response from the workflow agent. Please try your query again or rephrase it."
         
         return ChatResponse(

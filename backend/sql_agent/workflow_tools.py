@@ -807,14 +807,35 @@ def wf3_fetch_conversions(
         "last 30 days": (today - timedelta(days=30), today),
     }
     
-    # Check for "year to date"
-    if "year to date" in date_range.lower() or "ytd" in date_range.lower():
+    # Check for "year to date" (flexible matching)
+    date_range_lower = date_range.lower().strip()
+    if "year to date" in date_range_lower or "ytd" in date_range_lower:
         from_date = datetime(today.year, 1, 1)
         to_date = today
-    elif date_range.lower() in date_mappings:
-        from_date, to_date = date_mappings[date_range.lower()]
+    elif "last month" in date_range_lower:
+        # Handle "last month", "for last month", etc.
+        from_date = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+        to_date = today.replace(day=1) - timedelta(days=1)
+    elif "this month" in date_range_lower:
+        from_date = today.replace(day=1)
+        to_date = today
+    elif "last week" in date_range_lower:
+        from_date = today - timedelta(days=7)
+        to_date = today - timedelta(days=1)
+    elif "this week" in date_range_lower:
+        from_date = today - timedelta(days=today.weekday())
+        to_date = today
+    elif "last 7 days" in date_range_lower:
+        from_date = today - timedelta(days=7)
+        to_date = today
+    elif "last 30 days" in date_range_lower:
+        from_date = today - timedelta(days=30)
+        to_date = today
+    elif date_range_lower in date_mappings:
+        from_date, to_date = date_mappings[date_range_lower]
     else:
         # Default to last 30 days
+        print(f"⚠️  Warning: Unrecognized date range '{date_range}', defaulting to last 30 days")
         from_date = today - timedelta(days=30)
         to_date = today
     
