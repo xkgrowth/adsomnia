@@ -78,9 +78,18 @@ if [ "$SECRETS_MISSING" = true ]; then
     
     # Create GEMINI_KEY if missing
     if ! gcloud secrets describe GEMINI_KEY --project=${PROJECT_ID} >/dev/null 2>&1; then
-        echo -e "${BLUE}Creating GEMINI_KEY from .env...${NC}"
-        echo -n "AIzaSyCR_BMYds80o8lHHt1sTyQIheDKhqmKgzc" | gcloud secrets create GEMINI_KEY --data-file=- --project=${PROJECT_ID}
-        echo -e "${GREEN}✓ GEMINI_KEY created${NC}"
+        echo -e "${BLUE}Creating GEMINI_KEY...${NC}"
+        echo -e "${YELLOW}⚠️  Please provide GEMINI_KEY from .env file:${NC}"
+        read -sp "Enter GEMINI_KEY: " GEMINI_KEY_VALUE
+        echo ""
+        if [ -z "$GEMINI_KEY_VALUE" ]; then
+            echo -e "${RED}✗ GEMINI_KEY not provided. Skipping...${NC}"
+            echo -e "${YELLOW}You can create it later with:${NC}"
+            echo "  echo -n 'your-key-here' | gcloud secrets create GEMINI_KEY --data-file=- --project=${PROJECT_ID}"
+        else
+            echo -n "$GEMINI_KEY_VALUE" | gcloud secrets create GEMINI_KEY --data-file=- --project=${PROJECT_ID}
+            echo -e "${GREEN}✓ GEMINI_KEY created${NC}"
+        fi
     fi
     
     # Check for EVERFLOW_API_KEY
