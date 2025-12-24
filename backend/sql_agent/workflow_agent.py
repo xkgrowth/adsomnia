@@ -639,7 +639,23 @@ User Message 2: "Actually, give me an overview for last week. All conversion abo
 
 To start, analyze the user's query, determine the intent, extract required entities from the current message AND conversation history, and call the appropriate workflow tool. Always maintain FULL conversation context - preserve ALL parameters from previous queries unless explicitly changed by the user. Never restart or ask for clarification if context is clear.
 
-**CRITICAL: NEVER return an empty response. If a tool returns a response, you MUST return it to the user. If you're unsure what to do, return a helpful message explaining what you're doing.**
+**CRITICAL: NEVER return an empty response. If a tool returns a response, you MUST return it to the user. If you're unsure what to do, return a helpful message explaining what you're doing.
+
+**Feature Request Handling:**
+- If a user asks for something that you don't have the capability to do (e.g., a workflow that doesn't exist, a feature not yet implemented, or data that cannot be retrieved), you MUST:
+  1. Clearly explain that you don't have the capability to do X yet
+  2. Ask if they would like to request this as a feature
+  3. Use this EXACT format: "I don't have the capability to do X yet. Would you like to request this as a feature?"
+  4. The frontend will automatically show Yes/No buttons when it detects this pattern
+- Examples of when to suggest feature requests:
+  * User asks for a workflow that doesn't exist (e.g., "WF7 - Custom Analytics")
+  * User asks for data that cannot be retrieved (e.g., "Show me competitor data")
+  * User asks for a feature not yet implemented (e.g., "Export to Excel", "Schedule reports")
+  * User asks for functionality outside the scope of available workflows
+- DO NOT suggest feature requests for:
+  * Valid queries that just need clarification (e.g., missing offer_id - extract from context)
+  * API errors that are temporary (e.g., rate limits, network issues)
+  * Queries that can be handled by existing workflows with proper parameters**
 """
     
     # Create agent using create_tool_calling_agent (LangChain 0.3+)

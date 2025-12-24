@@ -18,6 +18,7 @@ type Message = {
     filters?: Record<string, any>;
     originalQuery?: string; // Store original user query for fetching full reports
   };
+  suggestsFeatureRequest?: boolean; // Whether this message suggests requesting as feature
 };
 
 type ExampleQuery = {
@@ -138,6 +139,7 @@ export type ChatSession = {
   messages: Message[];
   timestamp: Date;
   lastUpdated: Date;
+  isFeatureRequest?: boolean;
 };
 
 export type ChatHandle = {
@@ -147,7 +149,6 @@ export type ChatHandle = {
 };
 
 const STORAGE_KEY = "adsomnia_recent_chats";
-const MAX_RECENT_CHATS = 20;
 
 // Helper functions for localStorage
 const saveChatToStorage = (session: ChatSession) => {
@@ -158,8 +159,8 @@ const saveChatToStorage = (session: ChatSession) => {
     // Remove existing chat with same ID if it exists
     const filtered = chats.filter(c => c.id !== session.id);
     
-    // Add updated chat at the beginning
-    const updated = [session, ...filtered].slice(0, MAX_RECENT_CHATS);
+    // Add updated chat at the beginning (no limit - preserve all history)
+    const updated = [session, ...filtered];
     
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   } catch (err) {
@@ -223,6 +224,8 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
   const [conversionReportModalOpen, setConversionReportModalOpen] = useState(false);
   const [currentConversionReportData, setCurrentConversionReportData] = useState<ConversionReportData | null>(null);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+  const [isFeatureRequest, setIsFeatureRequest] = useState<boolean>(false);
+  const [showFeatureRequestModal, setShowFeatureRequestModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -271,6 +274,7 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
       setThreadId(null);
       setError(null);
       setCurrentChatId(null);
+      setIsFeatureRequest(false);
       setReportModalOpen(false);
       setCurrentReportData(null);
     },
@@ -278,6 +282,7 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
       setMessages(session.messages);
       setThreadId(session.threadId);
       setCurrentChatId(session.id);
+      setIsFeatureRequest(session.isFeatureRequest || false);
       setInput("");
       setError(null);
     },
@@ -291,6 +296,7 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
         messages,
         timestamp: messages[0]?.timestamp || new Date(),
         lastUpdated: new Date(),
+        isFeatureRequest,
       };
     },
   }));
@@ -310,11 +316,12 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
           messages,
           timestamp: messages[0].timestamp,
           lastUpdated: new Date(),
+          isFeatureRequest,
         };
         saveChatToStorage(session);
       }
     }
-  }, [messages, threadId, currentChatId]);
+  }, [messages, threadId, currentChatId, isFeatureRequest]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -826,6 +833,10 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
         // Not a conversion report, continue
       }
 
+      // Check if response suggests feature request
+      // Look for patterns like "I don't have the capability to do X yet. Would you like to request this as a feature?"
+      const suggestsFeatureRequest = /(?:don't have.*capability|don't support|can't do|not.*capable|would you like to request.*as.*feature|request.*as.*feature)/i.test(response.response);
+
       // Store comprehensive metadata for workflow-agnostic full report fetching
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -842,6 +853,7 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
           // Store any additional metadata from the report data
           ...(reportData?.metadata || {}),
         } : undefined,
+        suggestsFeatureRequest: suggestsFeatureRequest,
       };
       
       setMessages((prev) => [...prev, assistantMessage]);
@@ -883,6 +895,70 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
     console.log('handleExampleClick: Called with query', query);
     // Automatically submit the example query
     submitMessage(query);
+  };
+
+  const handleMarkAsFeatureRequest = () => {
+    setShowFeatureRequestModal(true);
+  };
+
+  const handleConfirmFeatureRequest = () => {
+    setIsFeatureRequest(true);
+    setShowFeatureRequestModal(false);
+    // Update the current session in storage
+    if (messages.length > 0) {
+      const firstUserMessage = messages.find(m => m.role === "user");
+      if (firstUserMessage) {
+        const chatId = currentChatId || Date.now().toString();
+        setCurrentChatId(chatId);
+        const session: ChatSession = {
+          id: chatId,
+          title: generateChatTitle(firstUserMessage.content),
+          threadId,
+          messages,
+          timestamp: messages[0].timestamp,
+          lastUpdated: new Date(),
+          isFeatureRequest: true,
+        };
+        saveChatToStorage(session);
+      }
+    }
+  };
+
+  const handleCancelFeatureRequest = () => {
+    setShowFeatureRequestModal(false);
+  };
+
+  const handleFeatureRequestYes = () => {
+    setIsFeatureRequest(true);
+    // Update the current session in storage
+    if (messages.length > 0) {
+      const firstUserMessage = messages.find(m => m.role === "user");
+      if (firstUserMessage) {
+        const chatId = currentChatId || Date.now().toString();
+        setCurrentChatId(chatId);
+        const session: ChatSession = {
+          id: chatId,
+          title: generateChatTitle(firstUserMessage.content),
+          threadId,
+          messages,
+          timestamp: messages[0].timestamp,
+          lastUpdated: new Date(),
+          isFeatureRequest: true,
+        };
+        saveChatToStorage(session);
+      }
+    }
+    // Remove the suggestsFeatureRequest flag from the message
+    setMessages(prev => prev.map(msg => 
+      msg.suggestsFeatureRequest ? { ...msg, suggestsFeatureRequest: false } : msg
+    ));
+  };
+
+  const handleFeatureRequestNo = () => {
+    // Just remove the suggestsFeatureRequest flag from the message
+    setMessages(prev => prev.map(msg => 
+      msg.suggestsFeatureRequest ? { ...msg, suggestsFeatureRequest: false } : msg
+    ));
   };
 
   const formatContent = (content: string) => {
@@ -1179,6 +1255,24 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
                       </button>
                     </div>
                   )}
+                  {/* Feature Request CTAs */}
+                  {message.suggestsFeatureRequest && (
+                    <div className="mt-3 flex items-center gap-3">
+                      <span className="text-xs text-text-muted">Would you like to request this as a feature?</span>
+                      <button
+                        onClick={handleFeatureRequestYes}
+                        className="px-4 py-1.5 text-xs bg-accent-yellow text-black hover:bg-accent-yellow/90 transition-colors font-semibold"
+                      >
+                        YES
+                      </button>
+                      <button
+                        onClick={handleFeatureRequestNo}
+                        className="px-4 py-1.5 text-xs border border-border bg-bg-tertiary text-text-primary hover:bg-bg-secondary transition-colors"
+                      >
+                        NO
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
@@ -1235,6 +1329,20 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
 
       {/* Input */}
       <div className="border-t border-border px-6 py-4">
+        {/* Request Feature Button */}
+        {messages.length > 0 && !isFeatureRequest && (
+          <div className="mb-3 flex justify-end">
+            <button
+              onClick={handleMarkAsFeatureRequest}
+              className="px-4 py-1.5 text-xs border border-border bg-bg-tertiary text-text-primary hover:bg-bg-secondary hover:border-accent-yellow transition-colors flex items-center gap-2"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              Request Feature
+            </button>
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="flex gap-4">
           <div className="flex-1 relative">
             <textarea
@@ -1295,6 +1403,34 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
             alert('Export functionality coming soon');
           }}
         />
+      )}
+
+      {/* Feature Request Modal */}
+      {showFeatureRequestModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-bg-secondary border border-border p-6 max-w-md w-full mx-4">
+            <h3 className="font-headline text-lg tracking-wider text-text-primary mb-4">
+              Request Feature
+            </h3>
+            <p className="text-sm text-text-primary mb-6">
+              Do you want to mark this chat for a feature request?
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={handleCancelFeatureRequest}
+                className="px-6 py-2 text-sm border border-border bg-bg-tertiary text-text-primary hover:bg-bg-secondary transition-colors"
+              >
+                NO
+              </button>
+              <button
+                onClick={handleConfirmFeatureRequest}
+                className="px-6 py-2 text-sm bg-accent-yellow text-black hover:bg-accent-yellow/90 transition-colors font-semibold"
+              >
+                YES
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
