@@ -665,8 +665,24 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
     if (!currentReportData || !currentReportData.metadata) return;
 
     try {
+      // Map WF2 report type to 'stats' for export (WF2 uses entity reporting which is stats)
+      let reportType = currentReportData.metadata.reportType || 'stats';
+      if (reportType === 'wf2' || reportType === 'wf2_top_lps') {
+        reportType = 'stats';
+      } else if (reportType === 'wf3_fraud') {
+        reportType = 'fraud';
+      } else if (reportType === 'wf3_conversions') {
+        reportType = 'conversions';
+      } else if (reportType === 'wf3_variance') {
+        reportType = 'variance';
+      } else if (reportType === 'wf3_scrub') {
+        reportType = 'scrub';
+      } else if (reportType === 'wf3_stats') {
+        reportType = 'stats';
+      }
+
       const exportRequest: ExportRequest = {
-        report_type: currentReportData.metadata.reportType || 'stats',
+        report_type: reportType as "fraud" | "conversions" | "stats" | "scrub" | "variance",
         date_range: currentReportData.metadata.dateRange || 'last 30 days',
         columns: selectedColumns,
         filters: currentReportData.metadata?.filters,
