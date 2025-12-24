@@ -1101,8 +1101,15 @@ const Chat = forwardRef<ChatHandle>((props, ref) => {
                           return (
                             <div key={qIdx} className="space-y-1.5">
                               {subheading && (
-                                <div className="text-xs font-medium text-text-secondary uppercase tracking-wide">
-                                  {subheading}
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-headline tracking-wider text-text-primary uppercase">
+                                    {subheading.replace(/\s*\(SOON\)\s*$/, '')}
+                                  </span>
+                                  {subheading.includes('(SOON)') && (
+                                    <span className="px-2 py-0.5 bg-cyan-500 text-slate-900 text-[10px] font-bold uppercase tracking-wider rounded">
+                                      SOON
+                                    </span>
+                                  )}
                                 </div>
                               )}
                               <button
