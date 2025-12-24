@@ -106,7 +106,7 @@ const generateExampleQueries = (affiliates: Affiliate[], offers: Offer[]): Examp
       queries: [
         // WF3.1: Conversion report (Fraud detection)
         {
-          subheading: "WF3.1: Conversion Report (Fraud Detection)",
+          subheading: "WF3.1: Conversion Report (Fraud Detection) (SOON)",
           query: "Show me conversion report for fraud detection for Papoaolado - BR - DOI - (responsive) with partner iMonetizeIt and source ID 134505 for last month",
         },
         
