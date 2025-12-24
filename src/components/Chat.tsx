@@ -111,19 +111,19 @@ const generateExampleQueries = (affiliates: Affiliate[], offers: Offer[]): Examp
         
         // WF3.2: Variance Report
         {
-          subheading: "WF3.2: Variance Report",
+          subheading: "WF3.2: Variance Report (SOON)",
           query: "Show me variance report for this week with parent Partner and child Offer",
         },
         
         // WF3.3: Check Average EPC per offer
         {
-          subheading: "WF3.3: Check Average EPC per Offer",
+          subheading: "WF3.3: Check Average EPC per Offer (SOON)",
           query: "Check average EPC per offer for Matchaora - IT - DOI - (Responsive) with Traffic_FB label and conversions greater than or equal to 50 for last week",
         },
         
         // WF3.4: Check CR Drop
         {
-          subheading: "WF3.4: Check CR Drop",
+          subheading: "WF3.4: Check CR Drop (SOON)",
           query: "Check conversion rate drop comparing one week versus another week for offers with Advertiser_Internal and Partner_external labels",
         },
       ],
